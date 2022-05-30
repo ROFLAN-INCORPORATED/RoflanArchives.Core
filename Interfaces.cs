@@ -5,7 +5,7 @@ namespace RoflanArchive.Core;
 internal interface IRoflanHeader
 {
     string Name { get; }
-    uint FilesCount { get; }
+    uint FilesCount { get; internal set; }
     ulong StartDefinitionsOffset { get; internal set; }
     ulong StartContentsOffset { get; internal set; }
 }

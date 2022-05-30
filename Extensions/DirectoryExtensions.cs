@@ -5,9 +5,9 @@ using System.Linq;
 
 namespace RoflanArchive.Core.Extensions;
 
-public static class DirectoryExtensions
+internal static class DirectoryExtensions
 {
-    public static List<string> GetAllFiles(
+    internal static List<string> GetAllFiles(
         string directoryPath,
         string[]? blacklistPaths = null,
         int maxNestingLevel = -1)
@@ -19,7 +19,7 @@ public static class DirectoryExtensions
             .ToList();
     }
 
-    public static IEnumerable<string> EnumerateAllFiles(
+    internal static IEnumerable<string> EnumerateAllFiles(
         string directoryPath,
         string[]? blacklistPaths = null,
         int maxNestingLevel = -1)
@@ -53,7 +53,7 @@ public static class DirectoryExtensions
             blacklistPaths,
             maxNestingLevel);
     }
-    private static IEnumerable<string> EnumerateAllFilesInternal(
+    internal static IEnumerable<string> EnumerateAllFilesInternal(
         string directoryPath,
         string[] blacklistPaths,
         int maxNestingLevel = -1)
