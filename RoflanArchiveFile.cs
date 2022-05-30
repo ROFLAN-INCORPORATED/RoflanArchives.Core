@@ -166,7 +166,7 @@ public class RoflanArchiveFile : IRoflanHeader
 
 
     private RoflanFile LoadFile(
-        uint fileId)
+        uint targetId)
     {
         using var stream = File.Open(
             Path, FileMode.Open);
@@ -188,7 +188,7 @@ public class RoflanArchiveFile : IRoflanHeader
         {
             var id = reader.ReadUInt32();
 
-            if (id != fileId)
+            if (id != targetId)
             {
                 var relativePathLength = reader.Read7BitEncodedInt();
 
@@ -216,7 +216,67 @@ public class RoflanArchiveFile : IRoflanHeader
         }
 
         if (file is null || definition is null || content is null)
-            throw new FileNotFoundException("File with provided id was not found.");
+            throw new FileNotFoundException($"File with provided id[{targetId}] was not found.");
+
+        var offset =
+            header.StartContentsOffset + definition.ContentOffset;
+
+        reader.BaseStream.Position = (long)offset;
+
+        content.Type = (RoflanFileType)reader.ReadByte();
+
+        file.Data = reader.ReadBytes((int)definition.ContentSize);
+
+        return file;
+    }
+    private RoflanFile LoadFile(
+        string targetRelativePath)
+    {
+        using var stream = File.Open(
+            Path, FileMode.Open);
+        using var reader = new BinaryReader(
+            stream);
+
+        Name = reader.ReadString();
+
+        var header = (IRoflanHeader)this;
+        header.FilesCount = reader.ReadUInt32();
+        header.StartDefinitionsOffset = reader.ReadUInt64();
+        header.StartContentsOffset = reader.ReadUInt64();
+
+        RoflanFile? file = null;
+        IRoflanFileDefinition? definition = null;
+        IRoflanFileContent? content = null;
+
+        for (uint i = 0; i < header.FilesCount; ++i)
+        {
+            var id = reader.ReadUInt32();
+            var relativePath = reader.ReadString();
+
+            if (relativePath != targetRelativePath)
+            {
+                reader.BaseStream.Position +=
+                    sizeof(ulong)
+                    + sizeof(ulong);
+
+                continue;
+            }
+
+            file = new RoflanFile(
+                id,
+                relativePath,
+                relativePath);
+            definition = file;
+            content = file;
+
+            definition.ContentSize = reader.ReadUInt64();
+            definition.ContentOffset = reader.ReadUInt64();
+
+            break;
+        }
+
+        if (file is null || definition is null || content is null)
+            throw new FileNotFoundException($"File with provided relative path[{targetRelativePath}] was not found.");
 
         var offset =
             header.StartContentsOffset + definition.ContentOffset;
@@ -361,5 +421,22 @@ public class RoflanArchiveFile : IRoflanHeader
     {
         return file
             .LoadFile(id);
+    }
+    public static RoflanFile GetFile(
+        string filePath, string relativePath)
+    {
+        if (!File.Exists(filePath))
+            throw new FileNotFoundException($"File at path '{filePath}' was not found");
+
+        return GetFile(
+            new RoflanArchiveFile(
+                filePath),
+            relativePath);
+    }
+    public static RoflanFile GetFile(
+        RoflanArchiveFile file, string relativePath)
+    {
+        return file
+            .LoadFile(relativePath);
     }
 }
