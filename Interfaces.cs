@@ -1,10 +1,12 @@
 ﻿using System;
+using K4os.Compression.LZ4;
 
 namespace RoflanArchive.Core;
 
 internal interface IRoflanHeader
 {
     string Name { get; }
+    LZ4Level CompressionLevel { get; internal set; }
     uint FilesCount { get; internal set; }
     ulong StartDefinitionsOffset { get; internal set; }
     ulong StartContentsOffset { get; internal set; }
@@ -17,6 +19,7 @@ internal interface IRoflanFileDefinition
     string RelativePath { get; }
     string Name { get; }
     string Extension { get; }
+    ulong OriginalContentSize { get; internal set; }
     ulong ContentSize { get; internal set; }
     ulong ContentOffset { get; internal set; }
 }

@@ -1,37 +1,55 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.IO;
+using K4os.Compression.LZ4;
 using RoflanArchive.Core.Extensions;
-using RoflanArchive.Core.Internal;
 
 namespace RoflanArchive.Core;
 
-public class RoflanArchiveFile : IRoflanHeader
+public class RoflanArchiveFile : IRoflanHeader, IEnumerable<RoflanFile>
 {
     public const string Extension = ".roflarc";
 
 
 
+    LZ4Level IRoflanHeader.CompressionLevel { get; set; }
     uint IRoflanHeader.FilesCount { get; set; }
     ulong IRoflanHeader.StartDefinitionsOffset { get; set; }
     ulong IRoflanHeader.StartContentsOffset { get; set; }
 
+    IEnumerator IEnumerable.GetEnumerator()
+    {
+        return GetEnumerator();
+    }
 
 
-    private readonly ObservableDictionary<uint, RoflanFile> _files;
+
+    private readonly ObservableCollection<RoflanFile> _files;
+    private readonly Dictionary<uint, RoflanFile> _filesById;
+    private readonly Dictionary<string, RoflanFile> _filesByRelativePath;
 
 
 
     public string Path { get; }
     public string Name { get; private set; }
-    public ReadOnlyDictionary<uint, RoflanFile> Files
+
+
+
+    public RoflanFile this[uint id]
     {
         get
         {
-            return new ReadOnlyDictionary<uint, RoflanFile>(
-                _files);
+            return _filesById[id];
+        }
+    }
+    public RoflanFile this[string relativePath]
+    {
+        get
+        {
+            return _filesByRelativePath[relativePath];
         }
     }
 
@@ -41,8 +59,13 @@ public class RoflanArchiveFile : IRoflanHeader
         string filePath,
         string name = "")
     {
-        _files = new ObservableDictionary<uint, RoflanFile>(
-            new Dictionary<uint, RoflanFile>());
+        _files =
+            new ObservableCollection<RoflanFile>(
+                new List<RoflanFile>());
+        _filesById =
+            new Dictionary<uint, RoflanFile>();
+        _filesByRelativePath =
+            new Dictionary<string, RoflanFile>();
 
         _files.CollectionChanged += Files_OnCollectionChanged;
 
@@ -64,6 +87,7 @@ public class RoflanArchiveFile : IRoflanHeader
         Name = reader.ReadString();
 
         var header = (IRoflanHeader)this;
+        header.CompressionLevel = (LZ4Level)reader.ReadInt32();
         header.FilesCount = reader.ReadUInt32();
         header.StartDefinitionsOffset = reader.ReadUInt64();
         header.StartContentsOffset = reader.ReadUInt64();
@@ -79,13 +103,19 @@ public class RoflanArchiveFile : IRoflanHeader
                 relativePath);
 
             var definition = (IRoflanFileDefinition)file;
+            definition.OriginalContentSize = reader.ReadUInt64();
             definition.ContentSize = reader.ReadUInt64();
             definition.ContentOffset = reader.ReadUInt64();
 
-            _files.Add(id, file);
+            _files.Add(
+                file);
+            _filesById.Add(
+                id, file);
+            _filesByRelativePath.Add(
+                relativePath, file);
         }
 
-        foreach (var (_, file) in Files)
+        foreach (var file in _files)
         {
             var definition = (IRoflanFileDefinition)file;
 
@@ -97,7 +127,15 @@ public class RoflanArchiveFile : IRoflanHeader
             var content = (IRoflanFileContent)file;
             content.Type = (RoflanFileType)reader.ReadByte();
 
-            file.Data = reader.ReadBytes((int)definition.ContentSize);
+            var dataCompressed = reader.ReadBytes(
+                (int)definition.ContentSize);
+            var data = new byte[definition.OriginalContentSize];
+
+            LZ4Codec.Decode(
+                dataCompressed,
+                data);
+
+            file.Data = data;
         }
 
         _files.CollectionChanged += Files_OnCollectionChanged;
@@ -105,7 +143,8 @@ public class RoflanArchiveFile : IRoflanHeader
         return this;
     }
 
-    private RoflanArchiveFile Save()
+    private RoflanArchiveFile Save(
+        LZ4Level compressionLevel)
     {
         using var stream = File.Open(
             Path, FileMode.OpenOrCreate);
@@ -116,35 +155,46 @@ public class RoflanArchiveFile : IRoflanHeader
 
         writer.Write(header.Name);
 
+        header.CompressionLevel = compressionLevel;
         header.StartDefinitionsOffset =
             (ulong)(writer.BaseStream.Position
+                    + sizeof(int)
                     + sizeof(uint)
                     + sizeof(ulong)
                     + sizeof(ulong));
 
+        writer.Write((int)header.CompressionLevel);
         writer.Write(header.FilesCount);
         writer.Write(header.StartDefinitionsOffset);
         writer.Write(header.StartContentsOffset);
 
+        var index = 0U;
         var contentOffset = 0UL;
+        var endDefinitionOffsets = new long[header.FilesCount];
 
-        foreach (var (_, file) in Files)
+        foreach (var file in _files)
         {
-            file.Data = File.ReadAllBytes(file.Path);
+            file.Data = File.ReadAllBytes(
+                file.Path);
 
             var content = (IRoflanFileContent)file;
             content.Type = RoflanFileType.RawBytes;
 
             var definition = (IRoflanFileDefinition)file;
-            definition.ContentSize = (ulong)content.Data.Length;
+            definition.OriginalContentSize = (ulong)content.Data.Length;
             definition.ContentOffset = contentOffset;
 
             contentOffset += sizeof(RoflanFileType) + definition.ContentSize;
 
             writer.Write(definition.Id);
             writer.Write(definition.RelativePath);
+            writer.Write(definition.OriginalContentSize);
             writer.Write(definition.ContentSize);
             writer.Write(definition.ContentOffset);
+
+            endDefinitionOffsets[index] = writer.BaseStream.Position;
+
+            ++index;
         }
 
         header.StartContentsOffset = (ulong)writer.BaseStream.Position;
@@ -153,12 +203,40 @@ public class RoflanArchiveFile : IRoflanHeader
         writer.Write(header.StartContentsOffset);
         writer.BaseStream.Position = (long)header.StartContentsOffset;
 
-        foreach (var (_, file) in Files)
+        index = 0U;
+
+        foreach (var file in _files)
         {
+            var definition = (IRoflanFileDefinition)file;
             var content = (IRoflanFileContent)file;
+
+            var dataCompressed = new byte[LZ4Codec.MaximumOutputSize(content.Data.Length)];
+            var dataCompressedLength =
+                LZ4Codec.Encode(
+                    content.Data.Span,
+                    dataCompressed,
+                    header.CompressionLevel);
+
+            Array.Resize(
+                ref dataCompressed,
+                dataCompressedLength);
+
+            definition.ContentSize = (ulong)dataCompressedLength;
+
+            var position = writer.BaseStream.Position;
+
+            writer.BaseStream.Position = endDefinitionOffsets[index]
+                                         - sizeof(ulong)
+                                         - sizeof(ulong);
+            writer.Write(definition.ContentSize);
+            writer.BaseStream.Position = position;
+
+            file.Data = dataCompressed;
 
             writer.Write((byte)content.Type);
             writer.Write(content.Data.Span);
+
+            ++index;
         }
 
         return this;
@@ -176,6 +254,7 @@ public class RoflanArchiveFile : IRoflanHeader
         Name = reader.ReadString();
 
         var header = (IRoflanHeader)this;
+        header.CompressionLevel = (LZ4Level)reader.ReadInt32();
         header.FilesCount = reader.ReadUInt32();
         header.StartDefinitionsOffset = reader.ReadUInt64();
         header.StartContentsOffset = reader.ReadUInt64();
@@ -195,6 +274,7 @@ public class RoflanArchiveFile : IRoflanHeader
                 reader.BaseStream.Position +=
                     relativePathLength
                     + sizeof(ulong)
+                    + sizeof(ulong)
                     + sizeof(ulong);
 
                 continue;
@@ -209,6 +289,7 @@ public class RoflanArchiveFile : IRoflanHeader
             definition = file;
             content = file;
 
+            definition.OriginalContentSize = reader.ReadUInt64();
             definition.ContentSize = reader.ReadUInt64();
             definition.ContentOffset = reader.ReadUInt64();
 
@@ -225,7 +306,15 @@ public class RoflanArchiveFile : IRoflanHeader
 
         content.Type = (RoflanFileType)reader.ReadByte();
 
-        file.Data = reader.ReadBytes((int)definition.ContentSize);
+        var dataCompressed = reader.ReadBytes(
+            (int)definition.ContentSize);
+        var data = new byte[definition.OriginalContentSize];
+
+        LZ4Codec.Decode(
+            dataCompressed,
+            data);
+
+        file.Data = data;
 
         return file;
     }
@@ -240,6 +329,7 @@ public class RoflanArchiveFile : IRoflanHeader
         Name = reader.ReadString();
 
         var header = (IRoflanHeader)this;
+        header.CompressionLevel = (LZ4Level)reader.ReadInt32();
         header.FilesCount = reader.ReadUInt32();
         header.StartDefinitionsOffset = reader.ReadUInt64();
         header.StartContentsOffset = reader.ReadUInt64();
@@ -257,6 +347,7 @@ public class RoflanArchiveFile : IRoflanHeader
             {
                 reader.BaseStream.Position +=
                     sizeof(ulong)
+                    + sizeof(ulong)
                     + sizeof(ulong);
 
                 continue;
@@ -269,6 +360,7 @@ public class RoflanArchiveFile : IRoflanHeader
             definition = file;
             content = file;
 
+            definition.OriginalContentSize = reader.ReadUInt64();
             definition.ContentSize = reader.ReadUInt64();
             definition.ContentOffset = reader.ReadUInt64();
 
@@ -285,9 +377,24 @@ public class RoflanArchiveFile : IRoflanHeader
 
         content.Type = (RoflanFileType)reader.ReadByte();
 
-        file.Data = reader.ReadBytes((int)definition.ContentSize);
+        var dataCompressed = reader.ReadBytes(
+            (int)definition.ContentSize);
+        var data = new byte[definition.OriginalContentSize];
+
+        LZ4Codec.Decode(
+            dataCompressed,
+            data);
+
+        file.Data = data;
 
         return file;
+    }
+
+
+
+    public IEnumerator<RoflanFile> GetEnumerator()
+    {
+        return _files.GetEnumerator();
     }
 
 
@@ -308,7 +415,8 @@ public class RoflanArchiveFile : IRoflanHeader
             throw new FileNotFoundException($"File at path '{filePath}' was not found");
 
         return new RoflanArchiveFile(
-                filePath)
+                filePath,
+                string.Empty)
             .Load();
     }
 
@@ -316,6 +424,7 @@ public class RoflanArchiveFile : IRoflanHeader
         string directoryPath,
         string fileName,
         string sourceDirectoryPath,
+        LZ4Level compressionLevel = LZ4Level.L00_FAST,
         string[]? blacklistPaths = null,
         int maxNestingLevel = -1)
     {
@@ -348,17 +457,23 @@ public class RoflanArchiveFile : IRoflanHeader
             var sourceFileRelativePath = System.IO.Path.GetRelativePath(
                 sourceDirectoryPath, sourceFilePath);
 
-            archive._files.Add(
+            var file = new RoflanFile(
                 id,
-                new RoflanFile(
-                    id,
-                    sourceFilePath,
-                    sourceFileRelativePath));
+                sourceFilePath,
+                sourceFileRelativePath);
+
+            archive._files.Add(
+                file);
+            archive._filesById.Add(
+                id, file);
+            archive._filesByRelativePath.Add(
+                sourceFileRelativePath, file);
 
             ++id;
         }
 
-        return archive.Save();
+        return archive.Save(
+            compressionLevel);
     }
 
     public static void Unpack(
@@ -387,7 +502,7 @@ public class RoflanArchiveFile : IRoflanHeader
         if (!Directory.Exists(targetDirectoryPath))
             Directory.CreateDirectory(targetDirectoryPath);
 
-        foreach (var (_, targetFile) in file._files)
+        foreach (var targetFile in file._files)
         {
             var targetFilePath = System.IO.Path.Combine(
                 targetDirectoryPath,
