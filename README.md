@@ -12,9 +12,14 @@ Core library for working with roflan engine archive files (\*.roflarc)
 var directoryPath = Console.ReadLine();
 var fileName = Console.ReadLine();
 var sourceDirectoryPath = Console.ReadLine();
+var compressionLevel = Convert.ToInt32(Console.ReadLine());
+
+if (compressionLevel is < (int)LZ4Level.L00_FAST or > (int)LZ4Level.L12_MAX)
+    compressionLevel = (int)LZ4Level.L00_FAST;
 
 RoflanArchiveFile.Pack(directoryPath,
-    fileName, sourceDirectoryPath);
+    fileName, sourceDirectoryPath,
+    (LZ4Level)compressionLevel);
 ```
 
 ## Open and load an existed archive
