@@ -187,6 +187,8 @@ public class RoflanArchiveFile : IRoflanHeader, IEnumerable<RoflanFile>
         definition.ContentSize = reader.ReadUInt64();
         definition.ContentOffset = reader.ReadUInt64();
 
+        definition.EndOffset = (ulong)reader.BaseStream.Position;
+
         return definition;
     }
     private IRoflanFileDefinition ReadFileDefinition(
@@ -240,10 +242,10 @@ public class RoflanArchiveFile : IRoflanHeader, IEnumerable<RoflanFile>
         return ReadFileDefinitionInternal(reader, id, relativePath);
     }
 
-    private (long EndDefinitionOffset, ulong ContentOffset) WriteFileDefinition(
+    private IRoflanFileDefinition WriteFileDefinition(
         BinaryWriter writer,
         RoflanFile file,
-        ulong contentOffset)
+        ref ulong contentOffset)
     {
         file.Data = File.ReadAllBytes(
             file.Path);
@@ -263,23 +265,24 @@ public class RoflanArchiveFile : IRoflanHeader, IEnumerable<RoflanFile>
         writer.Write(definition.ContentSize);
         writer.Write(definition.ContentOffset);
 
-        return (writer.BaseStream.Position, contentOffset);
+        definition.EndOffset = (ulong)writer.BaseStream.Position;
+
+        return definition;
     }
 
 
     private void WriteContentSize(
         BinaryWriter writer,
         IRoflanFileDefinition definition,
-        ulong contentSize,
-        long endDefinitionOffset)
+        ulong contentSize)
     {
         definition.ContentSize = contentSize;
 
         var position = writer.BaseStream.Position;
 
-        writer.BaseStream.Position = endDefinitionOffset
-                                     - sizeof(ulong)
-                                     - sizeof(ulong);
+        writer.BaseStream.Position = (long)(definition.EndOffset
+                                            - sizeof(ulong)
+                                            - sizeof(ulong));
         writer.Write(definition.ContentSize);
         writer.BaseStream.Position = position;
     }
@@ -311,10 +314,9 @@ public class RoflanArchiveFile : IRoflanHeader, IEnumerable<RoflanFile>
         return content;
     }
 
-    private void WriteFileContent(
+    private IRoflanFileContent WriteFileContent(
         BinaryWriter writer,
-        RoflanFile file,
-        long endDefinitionOffset)
+        RoflanFile file)
     {
         var header = (IRoflanHeader)this;
         var definition = (IRoflanFileDefinition)file;
@@ -333,13 +335,14 @@ public class RoflanArchiveFile : IRoflanHeader, IEnumerable<RoflanFile>
 
         WriteContentSize(
             writer, definition,
-            (ulong)dataCompressedLength,
-            endDefinitionOffset);
+            (ulong)dataCompressedLength);
 
         file.Data = dataCompressed;
 
         writer.Write((byte)content.Type);
         writer.Write(content.Data.Span);
+
+        return content;
     }
 
 
@@ -386,35 +389,23 @@ public class RoflanArchiveFile : IRoflanHeader, IEnumerable<RoflanFile>
 
         var header = WriteHeader(writer);
 
-        var endDefinitionOffsets =
-            new long[header.FilesCount];
         var contentOffset = 0UL;
-
-        var index = 0U;
 
         foreach (var file in _files)
         {
-            (endDefinitionOffsets[index], contentOffset) =
-                WriteFileDefinition(
-                    writer, file,
-                    contentOffset);
-
-            ++index;
+            WriteFileDefinition(
+                writer, file,
+                ref contentOffset);
         }
 
         WriteStartContentsOffset(
             writer, header,
             (ulong)writer.BaseStream.Position);
 
-        index = 0U;
-
         foreach (var file in _files)
         {
             WriteFileContent(
-                writer, file,
-                endDefinitionOffsets[index]);
-
-            ++index;
+                writer, file);
         }
 
         return this;
@@ -613,7 +604,8 @@ public class RoflanArchiveFile : IRoflanHeader, IEnumerable<RoflanFile>
 
 
     public static RoflanFile GetFile(
-        string filePath, uint id)
+        string filePath,
+        uint id)
     {
         if (!File.Exists(filePath))
             throw new FileNotFoundException($"File at path '{filePath}' was not found");
@@ -624,13 +616,15 @@ public class RoflanArchiveFile : IRoflanHeader, IEnumerable<RoflanFile>
             id);
     }
     public static RoflanFile GetFile(
-        RoflanArchiveFile file, uint id)
+        RoflanArchiveFile file,
+        uint id)
     {
         return file
             .LoadFile(id);
     }
     public static RoflanFile GetFile(
-        string filePath, string relativePath)
+        string filePath,
+        string relativePath)
     {
         if (!File.Exists(filePath))
             throw new FileNotFoundException($"File at path '{filePath}' was not found");
@@ -641,7 +635,8 @@ public class RoflanArchiveFile : IRoflanHeader, IEnumerable<RoflanFile>
             relativePath);
     }
     public static RoflanFile GetFile(
-        RoflanArchiveFile file, string relativePath)
+        RoflanArchiveFile file,
+        string relativePath)
     {
         return file
             .LoadFile(relativePath);

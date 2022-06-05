@@ -23,6 +23,10 @@ internal interface IRoflanFileDefinition
     ulong OriginalContentSize { get; internal set; }
     ulong ContentSize { get; internal set; }
     ulong ContentOffset { get; internal set; }
+
+
+
+    ulong EndOffset { get; internal set; }
 }
 
 internal interface IRoflanFileContent

@@ -7,6 +7,7 @@ public class RoflanFile : IRoflanFile
     ulong IRoflanFileDefinition.OriginalContentSize { get; set; }
     ulong IRoflanFileDefinition.ContentSize { get; set; }
     ulong IRoflanFileDefinition.ContentOffset { get; set; }
+    ulong IRoflanFileDefinition.EndOffset { get; set; }
 
     RoflanFileType IRoflanFileContent.Type { get; set; }
 
