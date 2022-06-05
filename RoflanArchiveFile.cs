@@ -34,7 +34,10 @@ public class RoflanArchiveFile : IRoflanHeader, IEnumerable<RoflanFile>
 
 
     public string Path { get; }
+    public Version Version { get; private set; }
     public string Name { get; private set; }
+
+    public ReadOnlyObservableCollection<RoflanFile> Files { get; private set; }
 
 
 
@@ -70,7 +73,12 @@ public class RoflanArchiveFile : IRoflanHeader, IEnumerable<RoflanFile>
         _files.CollectionChanged += Files_OnCollectionChanged;
 
         Path = filePath;
+        Version = typeof(RoflanArchiveFile).Assembly.GetName().Version
+                  ?? new Version(0, 0, 0, 0);
         Name = name;
+
+        Files = new ReadOnlyObservableCollection<RoflanFile>(
+            _files);
     }
 
 
@@ -84,6 +92,14 @@ public class RoflanArchiveFile : IRoflanHeader, IEnumerable<RoflanFile>
         using var reader = new BinaryReader(
             stream);
 
+        var major = reader.ReadInt32();
+        var minor = reader.ReadInt32();
+        var build = reader.ReadInt32();
+        var revision = reader.ReadInt32();
+
+        Version = new Version(
+            major, minor,
+            build, revision);
         Name = reader.ReadString();
 
         var header = (IRoflanHeader)this;
@@ -138,6 +154,9 @@ public class RoflanArchiveFile : IRoflanHeader, IEnumerable<RoflanFile>
             file.Data = data;
         }
 
+        Files = new ReadOnlyObservableCollection<RoflanFile>(
+            _files);
+
         _files.CollectionChanged += Files_OnCollectionChanged;
 
         return this;
@@ -153,6 +172,10 @@ public class RoflanArchiveFile : IRoflanHeader, IEnumerable<RoflanFile>
 
         var header = (IRoflanHeader)this;
 
+        writer.Write(header.Version.Major);
+        writer.Write(header.Version.Minor);
+        writer.Write(header.Version.Build);
+        writer.Write(header.Version.Revision);
         writer.Write(header.Name);
 
         header.CompressionLevel = compressionLevel;
@@ -251,6 +274,14 @@ public class RoflanArchiveFile : IRoflanHeader, IEnumerable<RoflanFile>
         using var reader = new BinaryReader(
             stream);
 
+        var major = reader.ReadInt32();
+        var minor = reader.ReadInt32();
+        var build = reader.ReadInt32();
+        var revision = reader.ReadInt32();
+
+        Version = new Version(
+            major, minor,
+            build, revision);
         Name = reader.ReadString();
 
         var header = (IRoflanHeader)this;
@@ -326,6 +357,14 @@ public class RoflanArchiveFile : IRoflanHeader, IEnumerable<RoflanFile>
         using var reader = new BinaryReader(
             stream);
 
+        var major = reader.ReadInt32();
+        var minor = reader.ReadInt32();
+        var build = reader.ReadInt32();
+        var revision = reader.ReadInt32();
+
+        Version = new Version(
+            major, minor,
+            build, revision);
         Name = reader.ReadString();
 
         var header = (IRoflanHeader)this;
@@ -404,6 +443,9 @@ public class RoflanArchiveFile : IRoflanHeader, IEnumerable<RoflanFile>
     {
         var header = (IRoflanHeader)this;
         header.FilesCount = (uint)_files.Count;
+
+        Files = new ReadOnlyObservableCollection<RoflanFile>(
+            _files);
     }
 
 
@@ -444,10 +486,12 @@ public class RoflanArchiveFile : IRoflanHeader, IEnumerable<RoflanFile>
 
         if (!Directory.Exists(directoryPath))
             throw new FileNotFoundException($"Directory at path '{directoryPath}' was not found");
+        if (!Directory.Exists(sourceDirectoryPath))
+            throw new FileNotFoundException($"Directory at path '{sourceDirectoryPath}' was not found");
 
         var archive = new RoflanArchiveFile(
             System.IO.Path.Combine(directoryPath, $"{fileName}{Extension}"),
-            directoryPath[(directoryPath.LastIndexOfAny(new[] { System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar }) + 1)..]);
+            sourceDirectoryPath[(sourceDirectoryPath.LastIndexOfAny(new[] { System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar }) + 1)..]);
 
         var id = 0U;
 

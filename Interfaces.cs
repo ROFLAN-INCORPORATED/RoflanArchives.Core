@@ -5,6 +5,7 @@ namespace RoflanArchive.Core;
 
 internal interface IRoflanHeader
 {
+    Version Version { get; }
     string Name { get; }
     LZ4Level CompressionLevel { get; internal set; }
     uint FilesCount { get; internal set; }
