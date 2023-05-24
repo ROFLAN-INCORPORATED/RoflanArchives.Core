@@ -3,7 +3,7 @@ using K4os.Compression.LZ4;
 
 namespace RoflanArchive.Core;
 
-internal interface IRoflanHeader
+internal interface IRoflanArchiveHeader
 {
     Version Version { get; }
     string Name { get; }
