@@ -20,36 +20,36 @@ enum RoflanFileType : byte
 
 struct RoflanHeader
 {
-	Major					: int;										// 4 bytes
-	Minor					: int;										// 4 bytes
-	Build					: int;										// 4 bytes
-	Revision				: int;										// 4 bytes
-	NameBytesLength			: int_7_bit;								// 1-5 bytes (7-bit encoded int)
-	Name					: byte[NameBytesLength];					// {NameBytesLength} bytes (utf8 string)
-	CompressionLevel		: LZ4Level;									// 4 bytes
-	FilesCount				: uint;										// 4 bytes
-	StartDefinitionsOffset 	: ulong;									// 8 bytes
-	StartContentsOffset 	: ulong;									// 8 bytes
+	Major					: int;												// 4 bytes
+	Minor					: int;												// 4 bytes
+	Build					: int;												// 4 bytes
+	Revision				: int;												// 4 bytes
+	NameBytesLength			: int_7_bit;										// 1-5 bytes (7-bit encoded int)
+	Name					: byte[NameBytesLength];							// {NameBytesLength} bytes (utf8 string)
+	CompressionLevel		: LZ4Level;											// 4 bytes
+	FilesCount				: uint;												// 4 bytes
+	StartDefinitionsOffset 	: ulong;											// 8 bytes
+	StartContentsOffset 	: ulong;											// 8 bytes
 }
 
 struct RoflanFileDefinition
 {
-	Id						: uint;										// 4 bytes
-	RelativePathBytesLength	: int_7_bit;								// 1-5 bytes (7-bit encoded int)
-	RelativePath			: byte[RelativePathBytesLength];			// {RelativePathBytesLength} bytes (utf8 string)
-	OriginalContentSize		: ulong;									// 8 bytes
-	ContentSize 			: ulong;									// 8 bytes
-	ContentOffset			: ulong;									// 8 bytes
+	Id						: uint;												// 4 bytes
+	RelativePathBytesLength	: int_7_bit;										// 1-5 bytes (7-bit encoded int)
+	RelativePath			: byte[RelativePathBytesLength];					// {RelativePathBytesLength} bytes (utf8 string)
+	OriginalContentSize		: ulong;											// 8 bytes
+	ContentSize 			: ulong;											// 8 bytes
+	ContentOffset			: ulong;											// 8 bytes
 }
 
 struct RoflanFileContent
 {
-	Type					: RoflanFileType;							// 1 byte
-	Data					: byte[RoflanFileDefinition.ContentSize];	// {RoflanFileDefinition.ContentSize} bytes
+	Type					: RoflanFileType;									// 1 byte
+	Data					: byte[RoflanFileDefinition.ContentSize];			// {RoflanFileDefinition.ContentSize} bytes
 }
 
 schema {
-	Header			: RoflanHeader;										// 
-	Definitions		: RoflanFileDefinition[RoflanHeader.FilesCount];	// 
-	Contents		: RoflanFileContent[RoflanHeader.FilesCount];		// 
+	Header					: RoflanHeader;										// Variable number of bytes
+	Definitions				: RoflanFileDefinition[RoflanHeader.FilesCount];	// Variable number of bytes
+	Contents				: RoflanFileContent[RoflanHeader.FilesCount];		// Variable number of bytes
 }
