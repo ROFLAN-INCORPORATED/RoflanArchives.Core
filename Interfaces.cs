@@ -13,10 +13,14 @@ internal interface IRoflanArchiveHeader
     ulong StartContentsOffset { get; internal set; }
 }
 
+internal interface IRoflanArchive : IRoflanArchiveHeader
+{
+
+}
+
 internal interface IRoflanFileDefinition
 {
     uint Id { get; }
-    string Path { get; }
     string RelativePath { get; }
     string Name { get; }
     string Extension { get; }
