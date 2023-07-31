@@ -1,8 +1,8 @@
 ﻿using System;
 
-namespace RoflanArchive.Core;
+namespace RoflanArchives.Core;
 
-internal enum RoflanFileType : byte
+internal enum RoflanArchiveFileType : byte
 {
     RawBytes = 0
 }
