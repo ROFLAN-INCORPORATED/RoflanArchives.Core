@@ -1,4 +1,4 @@
-# <div align="center">**RoflanArchive.Core**</div>
+# <div align="center">**RoflanArchives.Core**</div>
 
 Core library for working with roflan engine archive files (\*.roflarc)
 
@@ -17,7 +17,7 @@ var compressionLevel = Convert.ToInt32(Console.ReadLine());
 if (compressionLevel is < (int)LZ4Level.L00_FAST or > (int)LZ4Level.L12_MAX)
     compressionLevel = (int)LZ4Level.L00_FAST;
 
-RoflanArchiveFile.Pack(directoryPath,
+RoflanArchive.Pack(directoryPath,
     fileName, sourceDirectoryPath,
     (LZ4Level)compressionLevel);
 ```
@@ -27,7 +27,7 @@ RoflanArchiveFile.Pack(directoryPath,
 ```csharp
 var filePath = Console.ReadLine();
 
-var archive = RoflanArchiveFile.Open(
+var archive = RoflanArchive.Open(
     filePath);
 ```
 
@@ -37,7 +37,7 @@ var archive = RoflanArchiveFile.Open(
 var filePath = Console.ReadLine();
 var id = Convert.ToUInt32(Console.ReadLine());
 
-var file = RoflanArchiveFile.GetFile(
+var file = RoflanArchive.GetFile(
     filePath, id);
 ```
 
@@ -47,7 +47,7 @@ var file = RoflanArchiveFile.GetFile(
 var filePath = Console.ReadLine();
 var relativePath = Console.ReadLine();
 
-var file = RoflanArchiveFile.GetFile(
+var file = RoflanArchive.GetFile(
     filePath, relativePath);
 ```
 
@@ -57,6 +57,6 @@ var file = RoflanArchiveFile.GetFile(
 var filePath = Console.ReadLine();
 var targetDirectoryPath = Console.ReadLine();
 
-RoflanArchiveFile.Unpack(filePath,
+RoflanArchive.Unpack(filePath,
     targetDirectoryPath);
 ```
