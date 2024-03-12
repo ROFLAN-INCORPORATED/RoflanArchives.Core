@@ -37,6 +37,7 @@ struct RoflanFileDefinition
 	Id						: uint;												// 4 bytes
 	RelativePathBytesLength	: int_7_bit;										// 1-5 bytes (7-bit encoded int)
 	RelativePath			: byte[RelativePathBytesLength];					// {RelativePathBytesLength} bytes (utf8 string)
+	ContentHash				: byte[8]											// 8 bytes (xxHash3 - 64 bits)
 	OriginalContentSize		: ulong;											// 8 bytes
 	ContentSize 			: ulong;											// 8 bytes
 	ContentOffset			: ulong;											// 8 bytes

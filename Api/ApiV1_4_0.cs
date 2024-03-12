@@ -2,20 +2,23 @@
 using System.Collections.ObjectModel;
 using System.IO;
 using K4os.Compression.LZ4;
+using RoflanArchives.Core.Cryptography;
 
 namespace RoflanArchives.Core.Api;
 
 // ReSharper disable once InconsistentNaming
-internal sealed class ApiV1_3_0 : IRoflanArchiveApi
+internal sealed class ApiV1_4_0 : IRoflanArchiveApi
 {
     public Version Version { get; }
+    public XxHash3 HashAlgorithm { get; }
 
 
 
-    private ApiV1_3_0()
+    private ApiV1_4_0()
     {
         Version = new Version(
-            1, 3, 0, 0);
+            1, 4, 0, 0);
+        HashAlgorithm = new XxHash3();
     }
 
 
@@ -112,6 +115,7 @@ internal sealed class ApiV1_3_0 : IRoflanArchiveApi
 
         var definition = (IRoflanArchiveFileDefinition)file;
 
+        definition.ContentHash = reader.ReadBytes(XxHash3.SizeInBytes);
         definition.OriginalContentSize = reader.ReadUInt64();
         definition.ContentSize = reader.ReadUInt64();
         definition.ContentOffset = reader.ReadUInt64();
@@ -141,6 +145,7 @@ internal sealed class ApiV1_3_0 : IRoflanArchiveApi
 
             reader.BaseStream.Position +=
                 relativePathLength
+                + XxHash3.SizeInBytes
                 + sizeof(ulong)
                 + sizeof(ulong)
                 + sizeof(ulong);
@@ -163,7 +168,8 @@ internal sealed class ApiV1_3_0 : IRoflanArchiveApi
         if (relativePath != targetRelativePath)
         {
             reader.BaseStream.Position +=
-                sizeof(ulong)
+                XxHash3.SizeInBytes
+                + sizeof(ulong)
                 + sizeof(ulong)
                 + sizeof(ulong);
 
@@ -188,6 +194,7 @@ internal sealed class ApiV1_3_0 : IRoflanArchiveApi
 
         writer.Write(definition.Id);
         writer.Write(definition.RelativePath);
+        writer.Write(definition.ContentHash.Span);
         writer.Write(definition.OriginalContentSize);
         writer.Write(definition.ContentSize);
         writer.Write(definition.ContentOffset);
@@ -195,6 +202,27 @@ internal sealed class ApiV1_3_0 : IRoflanArchiveApi
         definition.EndOffset = (ulong)writer.BaseStream.Position;
 
         return definition;
+    }
+
+
+    private void WriteContentHash(
+        BinaryWriter writer,
+        IRoflanArchiveFileDefinition definition,
+        ReadOnlyMemory<byte> contentHash)
+    {
+        definition.ContentHash = contentHash;
+
+        var position = writer.BaseStream.Position;
+
+        writer.BaseStream.Position = (long)(definition.EndOffset
+                                            - XxHash3.SizeInBytes
+                                            - sizeof(ulong)
+                                            - sizeof(ulong)
+                                            - sizeof(ulong));
+
+        writer.Write(definition.ContentHash.Span);
+
+        writer.BaseStream.Position = position;
     }
 
 
@@ -256,6 +284,13 @@ internal sealed class ApiV1_3_0 : IRoflanArchiveApi
             dataCompressed,
             data);
 
+        var dataCorrupted = !HashAlgorithm.VerifyHash(
+            data,
+            definition.ContentHash.Span);
+
+        if (dataCorrupted)
+            throw new InvalidDataException($"File[Id={definition.Id}, RelativePath={definition.RelativePath}] was corrupted (hash mismatch).");
+
         file.Data = data;
 
         return content;
@@ -279,6 +314,11 @@ internal sealed class ApiV1_3_0 : IRoflanArchiveApi
         Array.Resize(
             ref dataCompressed,
             dataCompressedLength);
+
+        WriteContentHash(
+            writer, definition,
+            HashAlgorithm.GetHash(
+                content.Data.Span));
 
         WriteContentSize(
             writer, definition,

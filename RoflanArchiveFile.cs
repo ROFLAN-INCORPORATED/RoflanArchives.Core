@@ -8,6 +8,7 @@ public class RoflanArchiveFile : IRoflanArchiveFile
     string IRoflanArchiveFileDefinition.RelativePath { get; set; }
     string IRoflanArchiveFileDefinition.Name { get; set; }
     string IRoflanArchiveFileDefinition.Extension { get; set; }
+    ReadOnlyMemory<byte> IRoflanArchiveFileDefinition.ContentHash { get; set; }
     ulong IRoflanArchiveFileDefinition.OriginalContentSize { get; set; }
     ulong IRoflanArchiveFileDefinition.ContentSize { get; set; }
     ulong IRoflanArchiveFileDefinition.ContentOffset { get; set; }
@@ -72,6 +73,7 @@ public class RoflanArchiveFile : IRoflanArchiveFile
         definition.RelativePath = relativePath;
         definition.Name = System.IO.Path.GetFileNameWithoutExtension(RelativePath);
         definition.Extension = System.IO.Path.GetExtension(RelativePath);
+        definition.ContentHash = new byte[8];
         definition.ContentSize = size;
         definition.ContentOffset = offset;
 

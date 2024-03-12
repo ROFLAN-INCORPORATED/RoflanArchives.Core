@@ -32,6 +32,7 @@ internal interface IRoflanArchiveFileDefinition
     string RelativePath { get; internal set; }
     string Name { get; internal set; }
     string Extension { get; internal set; }
+    ReadOnlyMemory<byte> ContentHash { get; internal set; }
     ulong OriginalContentSize { get; internal set; }
     ulong ContentSize { get; internal set; }
     ulong ContentOffset { get; internal set; }
