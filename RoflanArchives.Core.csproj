@@ -7,9 +7,9 @@
     <RootNamespace>RoflanArchives.Core</RootNamespace>
     <AssemblyName>RoflanArchives.Core</AssemblyName>
     <Product>RoflanArchives.Core</Product>
-    <AssemblyVersion>1.4.0.0</AssemblyVersion>
-    <FileVersion>1.4.0.0</FileVersion>
-    <Version>1.4.0</Version>
+    <AssemblyVersion>1.4.2.0</AssemblyVersion>
+    <FileVersion>1.4.2.0</FileVersion>
+    <Version>1.4.2</Version>
     <Description>Core library for working with roflan engine archive files (*.roflarc)</Description>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
