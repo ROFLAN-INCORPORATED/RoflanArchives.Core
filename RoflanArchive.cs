@@ -7,6 +7,7 @@ using System.IO;
 using System.Linq;
 using K4os.Compression.LZ4;
 using RoflanArchives.Core.Api;
+using RoflanArchives.Core.Cryptography;
 using RoflanArchives.Core.Extensions;
 
 namespace RoflanArchives.Core;
@@ -648,5 +649,116 @@ public class RoflanArchive : IRoflanArchive, IEnumerable<RoflanArchiveFile>
     {
         return (RoflanArchiveFile)file
             .LoadFile(relativePath);
+    }
+
+
+
+    public static void CreateSignKeys(
+        string keyName,
+        string publicKeysDirectoryPath,
+        string privateKeysDirectoryPath)
+    {
+        SignUtils.CreateKeysFiles(
+            keyName,
+            publicKeysDirectoryPath,
+            privateKeysDirectoryPath);
+    }
+
+
+    public static void CreateSign(
+        RoflanArchive archive,
+        string privateKeyPath,
+        string signDirectoryPath = "")
+    {
+        CreateSign(
+            archive.Path,
+            privateKeyPath,
+            signDirectoryPath);
+    }
+    public static void CreateSign(
+        string archivePath,
+        string privateKeyPath,
+        string signDirectoryPath = "")
+    {
+        SignUtils.CreateSignFile(
+            privateKeyPath,
+            archivePath,
+            signDirectoryPath);
+    }
+
+    public static void VerifySigns(
+        RoflanArchive archive,
+        string publicKeysDirectoryPath,
+        string signsDirectoryPath = "")
+    {
+        VerifySigns(
+            archive.Path,
+            publicKeysDirectoryPath,
+            signsDirectoryPath);
+    }
+    public static void VerifySigns(
+        string archivePath,
+        string publicKeysDirectoryPath,
+        string signsDirectoryPath = "")
+    {
+        var verifySuccess = TryVerifySigns(
+            out var failedVerifySignPath,
+            archivePath,
+            publicKeysDirectoryPath,
+            signsDirectoryPath);
+
+        if (!verifySuccess)
+            throw new Exception($"Verify file['{archivePath}'] by sign file['{failedVerifySignPath}'] was failed");
+    }
+
+    public static bool TryVerifySigns(
+        out string failedVerifySignPath,
+        RoflanArchive archive,
+        string publicKeysDirectoryPath,
+        string signsDirectoryPath = "")
+    {
+        return TryVerifySigns(
+            out failedVerifySignPath,
+            archive.Path,
+            publicKeysDirectoryPath,
+            signsDirectoryPath);
+    }
+    public static bool TryVerifySigns(
+        out string failedVerifySignPath,
+        string archivePath,
+        string publicKeysDirectoryPath,
+        string signsDirectoryPath = "")
+    {
+        failedVerifySignPath = string.Empty;
+
+        var archiveFileName =
+            System.IO.Path.GetFileName(
+                archivePath);
+
+        foreach (var signFilePath in Directory.EnumerateFiles(
+                     signsDirectoryPath, $"{archiveFileName}.*.roflsign"))
+        {
+            var signFileName =
+                System.IO.Path.GetFileNameWithoutExtension(
+                    signFilePath);
+            var publicKeyName =
+                signFileName[(archiveFileName.Length + 1)..];
+            var publicKeyPath = System.IO.Path.Combine(
+                publicKeysDirectoryPath, $"{publicKeyName}.roflkey");
+
+            var verifySuccess = SignUtils.VerifySignFile(
+                publicKeyPath,
+                archivePath,
+                signFilePath);
+
+            if (verifySuccess)
+                continue;
+
+            failedVerifySignPath = signFilePath;
+
+            return false;
+        }
+
+        return true;
     }
 }

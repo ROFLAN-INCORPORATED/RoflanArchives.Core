@@ -36,7 +36,8 @@ internal sealed class XxHash3
     }
 
     public bool VerifyHash(
-        ReadOnlySpan<byte> data, ReadOnlySpan<byte> hash)
+        ReadOnlySpan<byte> data,
+        ReadOnlySpan<byte> hash)
     {
         var dataHash = GetHash(
             data);
