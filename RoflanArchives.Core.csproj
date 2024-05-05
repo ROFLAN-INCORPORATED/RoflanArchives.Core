@@ -2,17 +2,46 @@
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
+    <Configurations>Debug;Release;Release Nuget</Configurations>
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <RootNamespace>RoflanArchives.Core</RootNamespace>
     <AssemblyName>RoflanArchives.Core</AssemblyName>
     <Product>RoflanArchives.Core</Product>
-    <AssemblyVersion>1.4.2.0</AssemblyVersion>
-    <FileVersion>1.4.2.0</FileVersion>
-    <Version>1.4.2</Version>
+    <AssemblyVersion>1.4.3.0</AssemblyVersion>
+    <FileVersion>1.4.3.0</FileVersion>
+    <Version>1.4.3</Version>
+    <PackageId>RoflanArchives.Core</PackageId>
     <Description>Core library for working with roflan engine archive files (*.roflarc)</Description>
-    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <PackageTags>dotnetcore, netstandard, netcore, library, roflarc, roflan archive</PackageTags>
+    <Authors>Dmitry Ponomarev</Authors>
+    <Company>ROFLAN INCORPORATED</Company>
+    <Copyright>Copyright (c) ROFLAN INCORPORATED, 2022</Copyright>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <PackageProjectUrl>https://github.com/ROFLAN-INCORPORATED/RoflanArchives.Core</PackageProjectUrl>
+    <RepositoryType>git</RepositoryType>
+    <RepositoryUrl>https://github.com/ROFLAN-INCORPORATED/RoflanArchives.Core</RepositoryUrl>
   </PropertyGroup>
+
+  <PropertyGroup>
+    <NoWarn>$(NoWarn);CS0067</NoWarn>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release Nuget|AnyCPU'">
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+  </PropertyGroup>
+
+  <Target Name="PostPack" AfterTargets="Pack" Condition="'$(Configuration)|$(Platform)'=='Release Nuget|AnyCPU'">
+    <Exec Command="&quot;CopyPackage.exe&quot; &quot;..\..\_packages&quot; &quot;$(MSBuildProjectFullPath)&quot; &quot;$(Configuration)&quot;" WorkingDirectory="_tools\CopyPackage" />
+  </Target>
+
+  <ItemGroup>
+    <None Include="LICENSE">
+      <Pack>True</Pack>
+      <PackagePath></PackagePath>
+    </None>
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="K4os.Compression.LZ4" Version="1.3.5" />
