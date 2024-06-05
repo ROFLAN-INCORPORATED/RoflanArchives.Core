@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.ObjectModel;
+using System.IO;
 using K4os.Compression.LZ4;
 
 namespace RoflanArchives.Core;
@@ -39,13 +40,22 @@ internal interface IRoflanArchiveFileDefinition
 
 
 
+    string DirectoryPath { get; internal set; }
     ulong EndOffset { get; internal set; }
+
+
+
+    FileStream GetReadStream();
+
+    FileStream GetWriteStream();
 }
 
 internal interface IRoflanArchiveFileContent
 {
     RoflanArchiveFileType Type { get; internal set; }
+    [Obsolete($"For compatibility with API versions lower than 1.5.0.0. Use {nameof(DataStream)} property instead")]
     ReadOnlyMemory<byte> Data { get; internal set; }
+    Stream DataStream { get; internal set; }
 }
 
 internal interface IRoflanArchiveFile : IRoflanArchiveFileDefinition, IRoflanArchiveFileContent

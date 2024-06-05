@@ -6,6 +6,7 @@ using RoflanArchives.Core.Cryptography;
 
 namespace RoflanArchives.Core.Api;
 
+// ReSharper disable once UnusedType.Global
 // ReSharper disable once InconsistentNaming
 internal sealed class ApiV1_4_0 : IRoflanArchiveApi
 {

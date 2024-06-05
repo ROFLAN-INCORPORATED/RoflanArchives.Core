@@ -1,22 +1,35 @@
 ﻿using System;
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Linq;
 using K4os.Compression.LZ4;
+using K4os.Compression.LZ4.Streams;
+using RoflanArchives.Core.Cryptography;
+using RoflanArchives.Core.Extensions;
 
 namespace RoflanArchives.Core.Api;
 
 // ReSharper disable once UnusedType.Global
 // ReSharper disable once InconsistentNaming
-internal sealed class ApiV1_3_0 : IRoflanArchiveApi
+internal sealed class ApiV1_5_0 : IRoflanArchiveApi
 {
+    // ReSharper disable ConvertToConstant.Global
+    public static readonly ulong DummyULong = ulong.MaxValue;
+    public static readonly byte[] DummyXXHash3 = Enumerable.Repeat<byte>(255, XxHash3.SizeInBytes).ToArray();
+    // ReSharper restore ConvertToConstant.Global
+
+
+
     public Version Version { get; }
+    public XxHash3 HashAlgorithm { get; }
 
 
 
-    private ApiV1_3_0()
+    private ApiV1_5_0()
     {
         Version = new Version(
-            1, 3, 0, 0);
+            1, 5, 0, 0);
+        HashAlgorithm = new XxHash3();
     }
 
 
@@ -63,6 +76,13 @@ internal sealed class ApiV1_3_0 : IRoflanArchiveApi
         return header;
     }
 
+    /// <summary>
+    /// The actual value of the <i>
+    /// <see cref="IRoflanArchiveHeader.StartContentsOffset"/>
+    /// </i> property will be written in the <b>
+    /// <see cref="Save(RoflanArchive)"/>
+    /// </b>method
+    /// </summary>
     private IRoflanArchiveHeader WriteHeader(
         BinaryWriter writer,
         IRoflanArchiveHeader header)
@@ -72,18 +92,16 @@ internal sealed class ApiV1_3_0 : IRoflanArchiveApi
         writer.Write(header.Version.Build);
         writer.Write(header.Version.Revision);
         writer.Write(header.Name);
+        writer.Write((int)header.CompressionLevel);
+        writer.Write(header.FilesCount);
 
         header.StartDefinitionsOffset =
             (ulong)(writer.BaseStream.Position
-                    + sizeof(int)
-                    + sizeof(uint)
                     + sizeof(ulong)
                     + sizeof(ulong));
 
-        writer.Write((int)header.CompressionLevel);
-        writer.Write(header.FilesCount);
         writer.Write(header.StartDefinitionsOffset);
-        writer.Write(header.StartContentsOffset);
+        writer.Write(DummyULong); // IRoflanArchiveHeader.StartContentsOffset
 
         return header;
     }
@@ -113,6 +131,7 @@ internal sealed class ApiV1_3_0 : IRoflanArchiveApi
 
         var definition = (IRoflanArchiveFileDefinition)file;
 
+        definition.ContentHash = reader.ReadBytes(XxHash3.SizeInBytes);
         definition.OriginalContentSize = reader.ReadUInt64();
         definition.ContentSize = reader.ReadUInt64();
         definition.ContentOffset = reader.ReadUInt64();
@@ -142,6 +161,7 @@ internal sealed class ApiV1_3_0 : IRoflanArchiveApi
 
             reader.BaseStream.Position +=
                 relativePathLength
+                + XxHash3.SizeInBytes
                 + sizeof(ulong)
                 + sizeof(ulong)
                 + sizeof(ulong);
@@ -164,7 +184,8 @@ internal sealed class ApiV1_3_0 : IRoflanArchiveApi
         if (relativePath != targetRelativePath)
         {
             reader.BaseStream.Position +=
-                sizeof(ulong)
+                XxHash3.SizeInBytes
+                + sizeof(ulong)
                 + sizeof(ulong)
                 + sizeof(ulong);
 
@@ -175,6 +196,16 @@ internal sealed class ApiV1_3_0 : IRoflanArchiveApi
             reader, id, relativePath);
     }
 
+    /// <summary>
+    /// The actual values of the <i>
+    /// <see cref="IRoflanArchiveFileDefinition.ContentHash"/>,
+    /// <see cref="IRoflanArchiveFileDefinition.OriginalContentSize"/>,
+    /// <see cref="IRoflanArchiveFileDefinition.ContentSize"/> and
+    /// <see cref="IRoflanArchiveFileDefinition.ContentOffset"/>
+    /// </i> properties will be written in the <b>
+    /// <see cref="WriteFileContent(BinaryWriter, IRoflanArchiveHeader, IRoflanArchiveFile)"/>
+    /// </b>method
+    /// </summary>
     private IRoflanArchiveFileDefinition WriteFileDefinition(
         BinaryWriter writer,
         IRoflanArchiveFile file)
@@ -185,17 +216,57 @@ internal sealed class ApiV1_3_0 : IRoflanArchiveApi
 
         var definition = (IRoflanArchiveFileDefinition)file;
 
-        definition.OriginalContentSize = (ulong)content.Data.Length;
-
         writer.Write(definition.Id);
         writer.Write(definition.RelativePath);
-        writer.Write(definition.OriginalContentSize);
-        writer.Write(definition.ContentSize);
-        writer.Write(definition.ContentOffset);
+        writer.Write(DummyXXHash3); // IRoflanArchiveFileDefinition.ContentHash
+        writer.Write(DummyULong); // IRoflanArchiveFileDefinition.OriginalContentSize
+        writer.Write(DummyULong); // IRoflanArchiveFileDefinition.ContentSize
+        writer.Write(DummyULong); // IRoflanArchiveFileDefinition.ContentOffset
 
         definition.EndOffset = (ulong)writer.BaseStream.Position;
 
         return definition;
+    }
+
+
+    private void WriteContentHash(
+        BinaryWriter writer,
+        IRoflanArchiveFileDefinition definition,
+        ReadOnlyMemory<byte> contentHash)
+    {
+        definition.ContentHash = contentHash;
+
+        var position = writer.BaseStream.Position;
+
+        writer.BaseStream.Position = (long)(definition.EndOffset
+                                            - XxHash3.SizeInBytes
+                                            - sizeof(ulong)
+                                            - sizeof(ulong)
+                                            - sizeof(ulong));
+
+        writer.Write(definition.ContentHash.Span);
+
+        writer.BaseStream.Position = position;
+    }
+
+
+    private void WriteOriginalContentSize(
+        BinaryWriter writer,
+        IRoflanArchiveFileDefinition definition,
+        ulong originalContentSize)
+    {
+        definition.OriginalContentSize = originalContentSize;
+
+        var position = writer.BaseStream.Position;
+
+        writer.BaseStream.Position = (long)(definition.EndOffset
+                                            - sizeof(ulong)
+                                            - sizeof(ulong)
+                                            - sizeof(ulong));
+
+        writer.Write(definition.OriginalContentSize);
+
+        writer.BaseStream.Position = position;
     }
 
 
@@ -244,20 +315,64 @@ internal sealed class ApiV1_3_0 : IRoflanArchiveApi
         var definition = (IRoflanArchiveFileDefinition)file;
         var content = (IRoflanArchiveFileContent)file;
 
+        var position = 0L;
+
+        // save position
+        position = reader.BaseStream.Position;
+
+        // set position
         reader.BaseStream.Position = (long)(header.StartContentsOffset
                                             + definition.ContentOffset);
 
         content.Type = (RoflanArchiveFileType)reader.ReadByte();
 
-        var dataCompressed = reader.ReadBytes(
-            (int)definition.ContentSize);
-        var data = new byte[definition.OriginalContentSize];
+        using var dataCompressedStream = new MemoryStream();
 
-        LZ4Codec.Decode(
-            dataCompressed,
-            data);
+        var decompressSettings = new LZ4DecoderSettings
+        {
+            ExtraMemory = 0
+        };
 
-        file.Data = data;
+        reader.BaseStream.CopyBytesTo(
+            dataCompressedStream,
+            (long)definition.ContentSize);
+
+        dataCompressedStream.Position = 0;
+
+        using (var decompressStream = LZ4Stream.Decode(
+                   dataCompressedStream, decompressSettings, true))
+        {
+            content.DataStream.Position = 0;
+
+            decompressStream.CopyTo(
+                content.DataStream);
+        }
+
+        content.DataStream.Position = 0;
+
+        var dataDecompressedLength = content.DataStream.Length;
+
+        // reset position
+        reader.BaseStream.Position = position;
+
+        if ((ulong)dataDecompressedLength != definition.OriginalContentSize)
+            throw new InvalidDataException($"File[Id={definition.Id}, RelativePath={definition.RelativePath}] was corrupted (saved original length is not equal to length obtained after decompression).");
+
+        // save position
+        position = content.DataStream.Position;
+
+        // set position 0
+        content.DataStream.Position = 0;
+
+        var dataCorrupted = !HashAlgorithm.VerifyHash(
+            content.DataStream,
+            definition.ContentHash.Span);
+
+        // reset position
+        content.DataStream.Position = position;
+
+        if (dataCorrupted)
+            throw new InvalidDataException($"File[Id={definition.Id}, RelativePath={definition.RelativePath}] was corrupted (hash mismatch).");
 
         return content;
     }
@@ -270,16 +385,57 @@ internal sealed class ApiV1_3_0 : IRoflanArchiveApi
         var definition = (IRoflanArchiveFileDefinition)file;
         var content = (IRoflanArchiveFileContent)file;
 
-        var dataCompressed = new byte[LZ4Codec.MaximumOutputSize(content.Data.Length)];
-        var dataCompressedLength =
-            LZ4Codec.Encode(
-                content.Data.Span,
-                dataCompressed,
-                header.CompressionLevel);
+        var position = 0L;
 
-        Array.Resize(
-            ref dataCompressed,
-            dataCompressedLength);
+        using var dataCompressedStream = new MemoryStream();
+
+        var compressSettings = new LZ4EncoderSettings
+        {
+            CompressionLevel = header.CompressionLevel,
+            BlockChecksum = false,
+            BlockSize = 65536,
+            ChainBlocks = true,
+            ContentChecksum = false,
+            ContentLength = null,
+            ExtraMemory = 0
+        };
+
+        using (var compressStream = LZ4Stream.Encode(
+                   dataCompressedStream, compressSettings, true))
+        {
+            // save position
+            position = content.DataStream.Position;
+
+            // set position 0
+            content.DataStream.Position = 0;
+
+            content.DataStream.CopyTo(
+                compressStream);
+
+            // reset position
+            content.DataStream.Position = position;
+        }
+
+        var dataOriginalLength = content.DataStream.Length;
+        var dataCompressedLength = dataCompressedStream.Length;
+
+        // save position
+        position = content.DataStream.Position;
+
+        // set position 0
+        content.DataStream.Position = 0;
+
+        WriteContentHash(
+            writer, definition,
+            HashAlgorithm.GetHash(
+                content.DataStream));
+
+        // reset position
+        content.DataStream.Position = position;
+
+        WriteOriginalContentSize(
+            writer, definition,
+            (ulong)dataOriginalLength);
 
         WriteContentSize(
             writer, definition,
@@ -290,7 +446,15 @@ internal sealed class ApiV1_3_0 : IRoflanArchiveApi
             (ulong)writer.BaseStream.Position - header.StartContentsOffset);
 
         writer.Write((byte)content.Type);
-        writer.Write(dataCompressed.AsSpan());
+
+        writer.Flush();
+
+        dataCompressedStream.Position = 0;
+
+        dataCompressedStream.CopyTo(
+            writer.BaseStream);
+
+        writer.Flush();
 
         return content;
     }

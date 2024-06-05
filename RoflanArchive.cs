@@ -268,13 +268,33 @@ public class RoflanArchive : IRoflanArchive, IEnumerable<RoflanArchiveFile>
             var fileRelativePath = System.IO.Path.GetRelativePath(
                 sourceDirectoryPath, filePath);
 
-            var fileData = File.ReadAllBytes(
-                filePath);
-
             var file = new RoflanArchiveFile(
                 id,
-                fileRelativePath,
-                fileData);
+                fileRelativePath);
+
+            ((IRoflanArchiveFile)file).DirectoryPath = sourceDirectoryPath;
+
+            if (archive._api.Version < new Version(1, 5, 0, 0))
+            {
+                var fileData = File.ReadAllBytes(
+                    filePath);
+
+#pragma warning disable CS0618 // Тип или член устарел
+                ((IRoflanArchiveFile)file).Data = fileData;
+#pragma warning restore CS0618 // Тип или член устарел
+            }
+            else
+            {
+                using var fileDataStream =
+                    file.GetReadStream();
+
+                file.DataStream.Position = 0;
+
+                fileDataStream.CopyTo(
+                    file.DataStream);
+
+                file.DataStream.Position = 0;
+            }
 
             archive._files.Add(
                 file);
@@ -406,13 +426,34 @@ public class RoflanArchive : IRoflanArchive, IEnumerable<RoflanArchiveFile>
                         : fileRelativePath[(System.IO.Path.GetPathRoot(fileRelativePath)?.Length ?? 0)..];
                 }
 
-                var fileData = File.ReadAllBytes(
-                    filePath);
-
                 var file = new RoflanArchiveFile(
                     id,
-                    fileRelativePath,
-                    fileData);
+                    fileRelativePath);
+
+                // Small hack to get the parent directory
+                ((IRoflanArchiveFile)file).DirectoryPath = System.IO.Path.Combine(sourceDirectoryPath, "..");
+
+                if (archive._api.Version < new Version(1, 5, 0, 0))
+                {
+                    var fileData = File.ReadAllBytes(
+                        filePath);
+
+#pragma warning disable CS0618 // Тип или член устарел
+                    ((IRoflanArchiveFile)file).Data = fileData;
+#pragma warning restore CS0618 // Тип или член устарел
+                }
+                else
+                {
+                    using var fileDataStream =
+                        file.GetReadStream();
+
+                    file.DataStream.Position = 0;
+
+                    fileDataStream.CopyTo(
+                        file.DataStream);
+
+                    file.DataStream.Position = 0;
+                }
 
                 archive._files.Add(
                     file);
@@ -548,13 +589,34 @@ public class RoflanArchive : IRoflanArchive, IEnumerable<RoflanArchiveFile>
                         : fileRelativePath[(System.IO.Path.GetPathRoot(fileRelativePath)?.Length ?? 0)..];
                 }
 
-                var fileData = File.ReadAllBytes(
-                    filePath);
-
                 var file = new RoflanArchiveFile(
                     fileId,
-                    fileRelativePath,
-                    fileData);
+                    fileRelativePath);
+
+                // Small hack to get the parent directory
+                ((IRoflanArchiveFile)file).DirectoryPath = System.IO.Path.Combine(sourceDirectoryPath, "..");
+
+                if (archive._api.Version < new Version(1, 5, 0, 0))
+                {
+                    var fileData = File.ReadAllBytes(
+                        filePath);
+
+#pragma warning disable CS0618 // Тип или член устарел
+                    ((IRoflanArchiveFile)file).Data = fileData;
+#pragma warning restore CS0618 // Тип или член устарел
+                }
+                else
+                {
+                    using var fileDataStream =
+                        file.GetReadStream();
+
+                    file.DataStream.Position = 0;
+
+                    fileDataStream.CopyTo(
+                        file.DataStream);
+
+                    file.DataStream.Position = 0;
+                }
 
                 archive._files.Add(
                     file);
@@ -605,9 +667,33 @@ public class RoflanArchive : IRoflanArchive, IEnumerable<RoflanArchiveFile>
             if (targetFileDirectoryPath != null && !Directory.Exists(targetFileDirectoryPath))
                 Directory.CreateDirectory(targetFileDirectoryPath);
 
-            File.WriteAllBytes(
-                targetFilePath,
-                targetFile.Data.ToArray());
+            ((IRoflanArchiveFile)targetFile).DirectoryPath = targetDirectoryPath;
+
+            if (file._api.Version < new Version(1, 5, 0, 0))
+            {
+#pragma warning disable CS0618 // Тип или член устарел
+                File.WriteAllBytes(
+                    targetFilePath,
+                    targetFile.Data.ToArray());
+#pragma warning restore CS0618 // Тип или член устарел
+            }
+            else
+            {
+                using var fileDataStream =
+                    targetFile.GetWriteStream();
+
+                // save position
+                var position = targetFile.DataStream.Position;
+
+                // set position 0
+                targetFile.DataStream.Position = 0;
+
+                targetFile.DataStream.CopyTo(
+                    fileDataStream);
+
+                // reset position
+                targetFile.DataStream.Position = position;
+            }
         }
     }
 

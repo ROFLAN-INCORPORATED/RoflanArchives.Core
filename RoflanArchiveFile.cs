@@ -1,4 +1,5 @@
 ﻿using System;
+using System.IO;
 
 namespace RoflanArchives.Core;
 
@@ -12,10 +13,14 @@ public class RoflanArchiveFile : IRoflanArchiveFile
     ulong IRoflanArchiveFileDefinition.OriginalContentSize { get; set; }
     ulong IRoflanArchiveFileDefinition.ContentSize { get; set; }
     ulong IRoflanArchiveFileDefinition.ContentOffset { get; set; }
+
+    string IRoflanArchiveFileDefinition.DirectoryPath { get; set; }
     ulong IRoflanArchiveFileDefinition.EndOffset { get; set; }
+
 
     RoflanArchiveFileType IRoflanArchiveFileContent.Type { get; set; }
     ReadOnlyMemory<byte> IRoflanArchiveFileContent.Data { get; set; }
+    Stream IRoflanArchiveFileContent.DataStream { get; set; }
 
 
 
@@ -47,12 +52,29 @@ public class RoflanArchiveFile : IRoflanArchiveFile
             return ((IRoflanArchiveFile)this).Extension;
         }
     }
+    [Obsolete($"For compatibility with API versions lower than 1.5.0.0. Use {nameof(DataStream)} property instead")]
     public ReadOnlyMemory<byte> Data
     {
         get
         {
             return ((IRoflanArchiveFile)this).Data;
         }
+    }
+    public Stream DataStream
+    {
+        get
+        {
+            return ((IRoflanArchiveFile)this).DataStream;
+        }
+    }
+
+    internal string DirectoryPath
+    {
+        get
+        {
+            return ((IRoflanArchiveFile)this).DirectoryPath;
+        }
+
     }
 
 
@@ -62,7 +84,6 @@ public class RoflanArchiveFile : IRoflanArchiveFile
     internal RoflanArchiveFile(
         uint id,
         string relativePath,
-        ReadOnlyMemory<byte> data = default,
         RoflanArchiveFileType type = RoflanArchiveFileType.RawBytes,
         ulong size = 0,
         ulong offset = 0)
@@ -80,8 +101,27 @@ public class RoflanArchiveFile : IRoflanArchiveFile
         var content = (IRoflanArchiveFileContent)this;
 
         content.Type = type;
-        content.Data = data;
+#pragma warning disable CS0618 // Тип или член устарел
+        content.Data = ReadOnlyMemory<byte>.Empty;
+#pragma warning restore CS0618 // Тип или член устарел
+        content.DataStream = new MemoryStream();
     }
 
 #pragma warning restore CS8618
+
+
+
+    public FileStream GetReadStream()
+    {
+        var filePath = System.IO.Path.Combine(DirectoryPath, RelativePath);
+
+        return File.Open(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+    }
+
+    public FileStream GetWriteStream()
+    {
+        var filePath = System.IO.Path.Combine(DirectoryPath, RelativePath);
+
+        return File.Open(filePath, FileMode.Create, FileAccess.Write, FileShare.None);
+    }
 }
