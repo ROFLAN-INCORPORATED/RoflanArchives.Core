@@ -1,4 +1,11 @@
 # <div align="center">**RoflanArchives.Core**</div>
+## <div align="center">[![CodeLines](https://tokei.rs/b1/github/ROFLAN-INCORPORATED/RoflanArchives.Core?category=code)](https://github.com/ROFLAN-INCORPORATED/RoflanArchives.Core) [![ClosedMilestones](https://img.shields.io/github/milestones/closed/ROFLAN-INCORPORATED/RoflanArchives.Core?style=flat)](https://github.com/ROFLAN-INCORPORATED/RoflanArchives.Core/milestones?state=closed) [![ClosedIssues](https://img.shields.io/github/issues-closed/ROFLAN-INCORPORATED/RoflanArchives.Core?style=flat)](https://github.com/ROFLAN-INCORPORATED/RoflanArchives.Core/issues?q=is%3Aissue+is%3Aclosed)</div>
+
+### NuGet Packages
+
+- **[RoflanArchives.Core](https://www.nuget.org/packages/RoflanArchives.Core)**<br/>
+    [![Nuget](https://img.shields.io/nuget/v/RoflanArchives.Core?style=flat)](https://www.nuget.org/packages/RoflanArchives.Core)
+    [![Nuget](https://img.shields.io/nuget/dt/RoflanArchives.Core?style=flat)](https://www.nuget.org/packages/RoflanArchives.Core)
 
 Core library for working with roflan engine archive files (\*.roflarc)
 
