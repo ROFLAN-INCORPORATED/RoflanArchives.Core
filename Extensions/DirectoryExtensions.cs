@@ -7,22 +7,23 @@ namespace RoflanArchives.Core.Extensions;
 
 internal static class DirectoryExtensions
 {
-    internal static List<string> GetAllFiles(
+    public static List<string> GetAllFiles(
         string directoryPath,
         string[]? blacklistPaths = null,
-        int maxNestingLevel = -1)
+        int maxDepth = -1)
     {
         return EnumerateAllFiles(
                 directoryPath,
                 blacklistPaths,
-                maxNestingLevel)
+                maxDepth)
             .ToList();
     }
 
-    internal static IEnumerable<string> EnumerateAllFiles(
+
+    public static IEnumerable<string> EnumerateAllFiles(
         string directoryPath,
         string[]? blacklistPaths = null,
-        int maxNestingLevel = -1)
+        int maxDepth = -1)
     {
         directoryPath = directoryPath
             .TrimEnd(Path.DirectorySeparatorChar)
@@ -51,12 +52,12 @@ internal static class DirectoryExtensions
         return EnumerateAllFilesInternal(
             directoryPath,
             blacklistPaths,
-            maxNestingLevel);
+            maxDepth);
     }
-    internal static IEnumerable<string> EnumerateAllFilesInternal(
+    private static IEnumerable<string> EnumerateAllFilesInternal(
         string directoryPath,
         string[] blacklistPaths,
-        int maxNestingLevel = -1)
+        int maxDepth = -1)
     {
         if (!Directory.Exists(directoryPath))
             return Array.Empty<string>();
@@ -69,7 +70,7 @@ internal static class DirectoryExtensions
 
         var list = new List<string>(50);
 
-        if (maxNestingLevel is -1 or not 0)
+        if (maxDepth is < 0 or not 0)
         {
             foreach (var directory in Directory.EnumerateDirectories(directoryPath))
             {
@@ -77,7 +78,7 @@ internal static class DirectoryExtensions
                     EnumerateAllFilesInternal(
                         directory,
                         blacklistPaths,
-                        maxNestingLevel - 1));
+                        maxDepth - 1));
             }
         }
 

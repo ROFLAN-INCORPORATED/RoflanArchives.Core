@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
@@ -11,8 +12,290 @@ namespace RoflanArchives.Core.Api;
 
 // ReSharper disable once UnusedType.Global
 // ReSharper disable once InconsistentNaming
-internal sealed class ApiV1_5_0 : IRoflanArchiveApi
+internal sealed class ApiV1_6_0 : IRoflanArchiveApi
 {
+    internal static class CompressionUtils
+    {
+        private static readonly Dictionary<RoflanArchiveCompressionType, Type?> CompressionTypeToLevelMap;
+
+
+
+        public static readonly RoflanArchiveCompressionType DefaultCompressionType = RoflanArchiveCompressionType.LZ4Stream;
+        public static readonly RoflanArchiveCompressionType DefaultCompressionLevel = (byte)LZ4Level.L00_FAST;
+
+
+
+        static CompressionUtils()
+        {
+            CompressionTypeToLevelMap = CreateCompressionTypeToLevelMap();
+        }
+
+
+
+        private static Dictionary<RoflanArchiveCompressionType, Type?> CreateCompressionTypeToLevelMap()
+        {
+            return new Dictionary<RoflanArchiveCompressionType, Type?>
+            {
+                { RoflanArchiveCompressionType.Inherited, null },
+                { RoflanArchiveCompressionType.NoCompression, null },
+                { RoflanArchiveCompressionType.LZ4Block, typeof(LZ4Level) },
+                { RoflanArchiveCompressionType.LZ4Stream, typeof(LZ4Level) }
+            };
+        }
+
+
+
+        public static (RoflanArchiveCompressionType Type, Enum? MappedLevel) GetCompressionInfo(
+            IRoflanArchiveHeader header,
+            IRoflanArchiveFile file)
+        {
+            if (file.CompressionType == RoflanArchiveCompressionType.Inherited)
+            {
+                if (header.CompressionType == RoflanArchiveCompressionType.Inherited)
+                    return (DefaultCompressionType, DefaultCompressionLevel);
+                if (header.CompressionType == RoflanArchiveCompressionType.NoCompression)
+                    return (header.CompressionType, null);
+
+                var headerLevel = MapToCompressionLevelByTypeInternal(
+                    header.CompressionType, header.CompressionLevel);
+
+                if (headerLevel != null)
+                    return (header.CompressionType, headerLevel);
+
+                return (DefaultCompressionType, DefaultCompressionLevel);
+            }
+            if (file.CompressionType == RoflanArchiveCompressionType.NoCompression)
+                return (file.CompressionType, null);
+
+            var level = MapToCompressionLevelByTypeInternal(
+                file.CompressionType, file.CompressionLevel);
+
+            if (level != null)
+                return (file.CompressionType, level);
+
+            return (DefaultCompressionType, DefaultCompressionLevel);
+        }
+        public static Enum? MapToCompressionLevelByTypeInternal(
+            RoflanArchiveCompressionType compressionType,
+            byte? compressionLevel)
+        {
+            if (compressionType == RoflanArchiveCompressionType.NoCompression)
+                return null;
+            if (compressionLevel == null)
+                return null;
+            if (!CompressionTypeToLevelMap.ContainsKey(compressionType))
+                return null;
+
+            var compressionLevelUnderlyingEnumType =
+                CompressionTypeToLevelMap[compressionType];
+
+            if (compressionLevelUnderlyingEnumType == null)
+                return null;
+
+            var compressionLevelUnderlyingEnumValues = Enum
+                .GetValuesAsUnderlyingType(
+                    compressionLevelUnderlyingEnumType)
+                .Cast<int>()
+                .ToArray();
+
+            if (compressionLevelUnderlyingEnumValues.Length == 0)
+                return null;
+
+            var compressionLevelEnumValue = Math.Clamp(
+                compressionLevel.Value,
+                (byte)compressionLevelUnderlyingEnumValues[0],
+                (byte)compressionLevelUnderlyingEnumValues[^1]);
+
+            return (Enum)Enum.ToObject(
+                compressionLevelUnderlyingEnumType,
+                compressionLevelEnumValue);
+        }
+
+
+        public static void CompressContent(
+            IRoflanArchiveHeader header,
+            IRoflanArchiveFile file,
+            Stream compressedDataStream)
+        {
+            var content = (IRoflanArchiveFileContent)file;
+
+            var position = 0L;
+
+            var compressionInfo =
+                GetCompressionInfo(header, file);
+
+            switch (compressionInfo.Type)
+            {
+                case RoflanArchiveCompressionType.LZ4Block:
+                {
+                    var dataLength = (int)content.DataStream.Length;
+                    var data = new byte[dataLength];
+
+                    // save position
+                    position = content.DataStream.Position;
+
+                    // set position 0
+                    content.DataStream.Position = 0;
+
+                    _ = content.DataStream.Read(
+                        data, 0, dataLength);
+
+                    // reset position
+                    content.DataStream.Position = position;
+
+                    var compressedData = new byte[LZ4Codec.MaximumOutputSize(dataLength)];
+                    var compressedDataLength =
+                        LZ4Codec.Encode(
+                            data,
+                            compressedData,
+                            (LZ4Level)(compressionInfo.MappedLevel ?? LZ4Level.L00_FAST));
+
+                    Array.Resize(
+                        ref compressedData,
+                        compressedDataLength);
+
+                    compressedDataStream.Position = 0;
+
+                    compressedDataStream.Write(
+                        compressedData, 0, compressedDataLength);
+
+                    compressedDataStream.Position = 0;
+
+                    return;
+                }
+                case RoflanArchiveCompressionType.LZ4Stream:
+                {
+                    var compressSettings = new LZ4EncoderSettings
+                    {
+                        CompressionLevel = (LZ4Level)(compressionInfo.MappedLevel ?? LZ4Level.L00_FAST),
+                        BlockChecksum = false,
+                        BlockSize = 65536,
+                        ChainBlocks = true,
+                        ContentChecksum = false,
+                        ContentLength = null,
+                        ExtraMemory = 0
+                    };
+
+                    using (var compressStream = LZ4Stream.Encode(
+                               compressedDataStream, compressSettings, true))
+                    {
+                        // save position
+                        position = content.DataStream.Position;
+
+                        // set position 0
+                        content.DataStream.Position = 0;
+
+                        content.DataStream.CopyTo(
+                            compressStream);
+
+                        // reset position
+                        content.DataStream.Position = position;
+                    }
+
+                    compressedDataStream.Position = 0;
+
+                    return;
+                }
+                case RoflanArchiveCompressionType.NoCompression:
+                case RoflanArchiveCompressionType.Default:
+                default:
+                    // save position
+                    position = content.DataStream.Position;
+
+                    // set position 0
+                    content.DataStream.Position = 0;
+
+                    content.DataStream.CopyTo(
+                        compressedDataStream);
+
+                    // reset position
+                    content.DataStream.Position = position;
+
+                    compressedDataStream.Position = 0;
+
+                    return;
+            }
+        }
+
+        public static void DecompressContent(
+            IRoflanArchiveHeader header,
+            IRoflanArchiveFile file,
+            Stream compressedDataStream)
+        {
+            var content = (IRoflanArchiveFileContent)file;
+
+            var compressionInfo =
+                GetCompressionInfo(header, file);
+
+            switch (compressionInfo.Type)
+            {
+                case RoflanArchiveCompressionType.LZ4Block:
+                {
+                    var compressedDataLength = (int)compressedDataStream.Length;
+                    var compressedData = new byte[compressedDataLength];
+
+                    compressedDataStream.Position = 0;
+
+                    _ = compressedDataStream.Read(
+                        compressedData, 0, compressedDataLength);
+
+                    var dataLength = (int)file.OriginalContentSize;
+                    var data = new byte[dataLength];
+
+                    LZ4Codec.Decode(
+                        compressedData,
+                        data);
+
+                    content.DataStream.Position = 0;
+
+                    content.DataStream.Write(
+                        data, 0, dataLength);
+
+                    content.DataStream.Position = 0;
+
+                    return;
+                }
+                case RoflanArchiveCompressionType.LZ4Stream:
+                {
+                    var decompressSettings = new LZ4DecoderSettings
+                    {
+                        ExtraMemory = 0
+                    };
+
+                    compressedDataStream.Position = 0;
+
+                    using (var decompressStream = LZ4Stream.Decode(
+                               compressedDataStream, decompressSettings, true))
+                    {
+                        content.DataStream.Position = 0;
+
+                        decompressStream.CopyTo(
+                            content.DataStream);
+                    }
+
+                    content.DataStream.Position = 0;
+
+                    return;
+                }
+                case RoflanArchiveCompressionType.Default:
+                case RoflanArchiveCompressionType.NoCompression:
+                default:
+                    compressedDataStream.Position = 0;
+
+                    content.DataStream.Position = 0;
+
+                    compressedDataStream.CopyTo(
+                        content.DataStream);
+
+                    content.DataStream.Position = 0;
+
+                    return;
+            }
+        }
+    }
+
+
+
     // ReSharper disable ConvertToConstant.Global
     public static readonly ulong DummyULong = ulong.MaxValue;
     public static readonly byte[] DummyXXHash3 = Enumerable.Repeat<byte>(255, XxHash3.SizeInBytes).ToArray();
@@ -25,10 +308,10 @@ internal sealed class ApiV1_5_0 : IRoflanArchiveApi
 
 
 
-    private ApiV1_5_0()
+    private ApiV1_6_0()
     {
         Version = new Version(
-            1, 5, 0, 0);
+            1, 6, 0, 0);
         HashAlgorithm = new XxHash3();
     }
 
@@ -68,7 +351,7 @@ internal sealed class ApiV1_5_0 : IRoflanArchiveApi
             build, revision);
         header.Name = reader.ReadString();
 
-        header.CompressionLevel = (byte)(LZ4Level)reader.ReadInt32();
+        header.CompressionLevel = reader.ReadByte();
         header.FilesCount = reader.ReadUInt32();
         header.StartDefinitionsOffset = reader.ReadUInt64();
         header.StartContentsOffset = reader.ReadUInt64();
@@ -92,7 +375,7 @@ internal sealed class ApiV1_5_0 : IRoflanArchiveApi
         writer.Write(header.Version.Build);
         writer.Write(header.Version.Revision);
         writer.Write(header.Name);
-        writer.Write((int)header.CompressionLevel);
+        writer.Write(header.CompressionLevel);
         writer.Write(header.FilesCount);
 
         header.StartDefinitionsOffset =
@@ -131,6 +414,8 @@ internal sealed class ApiV1_5_0 : IRoflanArchiveApi
 
         var definition = (IRoflanArchiveFileDefinition)file;
 
+        definition.CompressionType = (RoflanArchiveCompressionType)reader.ReadByte();
+        definition.CompressionLevel = reader.ReadByte();
         definition.ContentHash = reader.ReadBytes(XxHash3.SizeInBytes);
         definition.OriginalContentSize = reader.ReadUInt64();
         definition.ContentSize = reader.ReadUInt64();
@@ -161,6 +446,8 @@ internal sealed class ApiV1_5_0 : IRoflanArchiveApi
 
             reader.BaseStream.Position +=
                 relativePathLength
+                + sizeof(byte)
+                + sizeof(byte)
                 + XxHash3.SizeInBytes
                 + sizeof(ulong)
                 + sizeof(ulong)
@@ -184,7 +471,9 @@ internal sealed class ApiV1_5_0 : IRoflanArchiveApi
         if (relativePath != targetRelativePath)
         {
             reader.BaseStream.Position +=
-                XxHash3.SizeInBytes
+                sizeof(byte)
+                + sizeof(byte)
+                + XxHash3.SizeInBytes
                 + sizeof(ulong)
                 + sizeof(ulong)
                 + sizeof(ulong);
@@ -208,13 +497,12 @@ internal sealed class ApiV1_5_0 : IRoflanArchiveApi
     /// </summary>
     private IRoflanArchiveFileDefinition WriteFileDefinition(
         BinaryWriter writer,
-        IRoflanArchiveFile file)
+        IRoflanArchiveFileDefinition definition)
     {
-        var content = (IRoflanArchiveFileContent)file;
-        var definition = (IRoflanArchiveFileDefinition)file;
-
         writer.Write(definition.Id);
         writer.Write(definition.RelativePath);
+        writer.Write((byte)definition.CompressionType);
+        writer.Write(definition.CompressionLevel);
         writer.Write(DummyXXHash3); // IRoflanArchiveFileDefinition.ContentHash
         writer.Write(DummyULong); // IRoflanArchiveFileDefinition.OriginalContentSize
         writer.Write(DummyULong); // IRoflanArchiveFileDefinition.ContentSize
@@ -321,31 +609,14 @@ internal sealed class ApiV1_5_0 : IRoflanArchiveApi
         reader.BaseStream.Position = (long)(header.StartContentsOffset
                                             + definition.ContentOffset);
 
-        _ = reader.ReadByte(); // RoflanArchiveFileType IRoflanArchiveFileContent.Type (always equals 0 - RawBytes)
-
-        using var dataCompressedStream = new MemoryStream();
-
-        var decompressSettings = new LZ4DecoderSettings
-        {
-            ExtraMemory = 0
-        };
+        using var compressedDataStream = new MemoryStream();
 
         reader.BaseStream.CopyBytesTo(
-            dataCompressedStream,
+            compressedDataStream,
             (long)definition.ContentSize);
 
-        dataCompressedStream.Position = 0;
-
-        using (var decompressStream = LZ4Stream.Decode(
-                   dataCompressedStream, decompressSettings, true))
-        {
-            content.DataStream.Position = 0;
-
-            decompressStream.CopyTo(
-                content.DataStream);
-        }
-
-        content.DataStream.Position = 0;
+        CompressionUtils.DecompressContent(
+            header, file, compressedDataStream);
 
         var dataDecompressedLength = content.DataStream.Length;
 
@@ -384,37 +655,13 @@ internal sealed class ApiV1_5_0 : IRoflanArchiveApi
 
         var position = 0L;
 
-        using var dataCompressedStream = new MemoryStream();
+        using var compressedDataStream = new MemoryStream();
 
-        var compressSettings = new LZ4EncoderSettings
-        {
-            CompressionLevel = (LZ4Level)header.CompressionLevel,
-            BlockChecksum = false,
-            BlockSize = 65536,
-            ChainBlocks = true,
-            ContentChecksum = false,
-            ContentLength = null,
-            ExtraMemory = 0
-        };
-
-        using (var compressStream = LZ4Stream.Encode(
-                   dataCompressedStream, compressSettings, true))
-        {
-            // save position
-            position = content.DataStream.Position;
-
-            // set position 0
-            content.DataStream.Position = 0;
-
-            content.DataStream.CopyTo(
-                compressStream);
-
-            // reset position
-            content.DataStream.Position = position;
-        }
+        CompressionUtils.CompressContent(
+            header, file, compressedDataStream);
 
         var dataOriginalLength = content.DataStream.Length;
-        var dataCompressedLength = dataCompressedStream.Length;
+        var dataCompressedLength = compressedDataStream.Length;
 
         // save position
         position = content.DataStream.Position;
@@ -442,13 +689,11 @@ internal sealed class ApiV1_5_0 : IRoflanArchiveApi
             writer, definition,
             (ulong)writer.BaseStream.Position - header.StartContentsOffset);
 
-        writer.Write((byte)0); // RoflanArchiveFileType IRoflanArchiveFileContent.Type (always equals 0 - RawBytes)
-
         writer.Flush();
 
-        dataCompressedStream.Position = 0;
+        compressedDataStream.Position = 0;
 
-        dataCompressedStream.CopyTo(
+        compressedDataStream.CopyTo(
             writer.BaseStream);
 
         writer.Flush();

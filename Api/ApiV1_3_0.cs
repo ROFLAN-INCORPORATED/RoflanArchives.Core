@@ -7,6 +7,7 @@ namespace RoflanArchives.Core.Api;
 
 // ReSharper disable once UnusedType.Global
 // ReSharper disable once InconsistentNaming
+[Obsolete]
 internal sealed class ApiV1_3_0 : IRoflanArchiveApi
 {
     public Version Version { get; }
@@ -55,7 +56,7 @@ internal sealed class ApiV1_3_0 : IRoflanArchiveApi
             build, revision);
         header.Name = reader.ReadString();
 
-        header.CompressionLevel = (LZ4Level)reader.ReadInt32();
+        header.CompressionLevel = (byte)(LZ4Level)reader.ReadInt32();
         header.FilesCount = reader.ReadUInt32();
         header.StartDefinitionsOffset = reader.ReadUInt64();
         header.StartContentsOffset = reader.ReadUInt64();
@@ -180,9 +181,6 @@ internal sealed class ApiV1_3_0 : IRoflanArchiveApi
         IRoflanArchiveFile file)
     {
         var content = (IRoflanArchiveFileContent)file;
-
-        content.Type = RoflanArchiveFileType.RawBytes;
-
         var definition = (IRoflanArchiveFileDefinition)file;
 
         definition.OriginalContentSize = (ulong)content.Data.Length;
@@ -247,7 +245,7 @@ internal sealed class ApiV1_3_0 : IRoflanArchiveApi
         reader.BaseStream.Position = (long)(header.StartContentsOffset
                                             + definition.ContentOffset);
 
-        content.Type = (RoflanArchiveFileType)reader.ReadByte();
+        _ = reader.ReadByte(); // RoflanArchiveFileType IRoflanArchiveFileContent.Type (always equals 0 - RawBytes)
 
         var dataCompressed = reader.ReadBytes(
             (int)definition.ContentSize);
@@ -275,7 +273,7 @@ internal sealed class ApiV1_3_0 : IRoflanArchiveApi
             LZ4Codec.Encode(
                 content.Data.Span,
                 dataCompressed,
-                header.CompressionLevel);
+                (LZ4Level)header.CompressionLevel);
 
         Array.Resize(
             ref dataCompressed,
@@ -289,7 +287,7 @@ internal sealed class ApiV1_3_0 : IRoflanArchiveApi
             writer, definition,
             (ulong)writer.BaseStream.Position - header.StartContentsOffset);
 
-        writer.Write((byte)content.Type);
+        writer.Write((byte)0); // RoflanArchiveFileType IRoflanArchiveFileContent.Type (always equals 0 - RawBytes)
         writer.Write(dataCompressed.AsSpan());
 
         return content;

@@ -2,7 +2,12 @@
 
 namespace RoflanArchives.Core;
 
-internal enum RoflanArchiveFileType : byte
+
+public enum RoflanArchiveCompressionType : byte
 {
-    RawBytes = 0
+    Inherited = 0,
+    NoCompression = 1,
+    LZ4Block = 2,
+    LZ4Stream = 3,
+    Default = Inherited
 }

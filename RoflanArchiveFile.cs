@@ -7,18 +7,21 @@ public class RoflanArchiveFile : IRoflanArchiveFile
 {
     uint IRoflanArchiveFileDefinition.Id { get; set; }
     string IRoflanArchiveFileDefinition.RelativePath { get; set; }
-    string IRoflanArchiveFileDefinition.Name { get; set; }
-    string IRoflanArchiveFileDefinition.Extension { get; set; }
+    RoflanArchiveCompressionType IRoflanArchiveFileDefinition.CompressionType { get; set; }
+    byte IRoflanArchiveFileDefinition.CompressionLevel { get; set; }
     ReadOnlyMemory<byte> IRoflanArchiveFileDefinition.ContentHash { get; set; }
     ulong IRoflanArchiveFileDefinition.OriginalContentSize { get; set; }
     ulong IRoflanArchiveFileDefinition.ContentSize { get; set; }
     ulong IRoflanArchiveFileDefinition.ContentOffset { get; set; }
 
+    // Runtime Only Properties
+    string IRoflanArchiveFileDefinition.Name { get; set; }
+    string IRoflanArchiveFileDefinition.Extension { get; set; }
     string IRoflanArchiveFileDefinition.DirectoryPath { get; set; }
     ulong IRoflanArchiveFileDefinition.EndOffset { get; set; }
+    //
 
 
-    RoflanArchiveFileType IRoflanArchiveFileContent.Type { get; set; }
     ReadOnlyMemory<byte> IRoflanArchiveFileContent.Data { get; set; }
     Stream IRoflanArchiveFileContent.DataStream { get; set; }
 
@@ -84,7 +87,8 @@ public class RoflanArchiveFile : IRoflanArchiveFile
     internal RoflanArchiveFile(
         uint id,
         string relativePath,
-        RoflanArchiveFileType type = RoflanArchiveFileType.RawBytes,
+        RoflanArchiveCompressionType compressionType = RoflanArchiveCompressionType.Inherited,
+        byte? compressionLevel = null,
         ulong size = 0,
         ulong offset = 0)
     {
@@ -92,15 +96,17 @@ public class RoflanArchiveFile : IRoflanArchiveFile
 
         definition.Id = id;
         definition.RelativePath = relativePath;
-        definition.Name = System.IO.Path.GetFileNameWithoutExtension(RelativePath);
-        definition.Extension = System.IO.Path.GetExtension(RelativePath);
+        definition.CompressionType = compressionType;
+        definition.CompressionLevel = compressionLevel ?? 0;
         definition.ContentHash = new byte[8];
         definition.ContentSize = size;
         definition.ContentOffset = offset;
 
+        definition.Name = System.IO.Path.GetFileNameWithoutExtension(RelativePath);
+        definition.Extension = System.IO.Path.GetExtension(RelativePath);
+
         var content = (IRoflanArchiveFileContent)this;
 
-        content.Type = type;
 #pragma warning disable CS0618 // Тип или член устарел
         content.Data = ReadOnlyMemory<byte>.Empty;
 #pragma warning restore CS0618 // Тип или член устарел

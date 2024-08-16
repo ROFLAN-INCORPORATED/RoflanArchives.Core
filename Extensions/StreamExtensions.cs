@@ -6,9 +6,11 @@ namespace RoflanArchives.Core.Extensions;
 
 internal static class StreamExtensions
 {
-    internal const int DefaultBufferSize = 81920; // 65536
+    public const int DefaultBufferSize = 81920; // 65536
 
-    internal static long CopyBytesTo(
+
+
+    public static long CopyBytesTo(
         this Stream source, Stream destination,
         long count, int bufferSize = DefaultBufferSize)
     {
@@ -29,7 +31,7 @@ internal static class StreamExtensions
 
         return count - bytesRemaining;
     }
-    internal static int CopyBytesTo(
+    public static int CopyBytesTo(
         this Stream source, Stream destination,
         int count, int bufferSize = DefaultBufferSize)
     {

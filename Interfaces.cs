@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.ObjectModel;
 using System.IO;
-using K4os.Compression.LZ4;
 
 namespace RoflanArchives.Core;
 
@@ -9,7 +8,8 @@ internal interface IRoflanArchiveHeader
 {
     Version Version { get; internal set; }
     string Name { get; internal set; }
-    LZ4Level CompressionLevel { get; internal set; }
+    RoflanArchiveCompressionType CompressionType { get; internal set; }
+    byte CompressionLevel { get; internal set; }
     uint FilesCount { get; internal set; }
     ulong StartDefinitionsOffset { get; internal set; }
     ulong StartContentsOffset { get; internal set; }
@@ -31,8 +31,8 @@ internal interface IRoflanArchiveFileDefinition
 {
     uint Id { get; internal set; }
     string RelativePath { get; internal set; }
-    string Name { get; internal set; }
-    string Extension { get; internal set; }
+    RoflanArchiveCompressionType CompressionType { get; internal set; }
+    byte CompressionLevel { get; internal set; }
     ReadOnlyMemory<byte> ContentHash { get; internal set; }
     ulong OriginalContentSize { get; internal set; }
     ulong ContentSize { get; internal set; }
@@ -40,6 +40,8 @@ internal interface IRoflanArchiveFileDefinition
 
 
 
+    string Name { get; internal set; }
+    string Extension { get; internal set; }
     string DirectoryPath { get; internal set; }
     ulong EndOffset { get; internal set; }
 
@@ -52,7 +54,6 @@ internal interface IRoflanArchiveFileDefinition
 
 internal interface IRoflanArchiveFileContent
 {
-    RoflanArchiveFileType Type { get; internal set; }
     [Obsolete($"For compatibility with API versions lower than 1.5.0.0. Use {nameof(DataStream)} property instead")]
     ReadOnlyMemory<byte> Data { get; internal set; }
     Stream DataStream { get; internal set; }
