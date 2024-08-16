@@ -351,6 +351,7 @@ internal sealed class ApiV1_6_0 : IRoflanArchiveApi
             build, revision);
         header.Name = reader.ReadString();
 
+        header.CompressionType = (RoflanArchiveCompressionType)reader.ReadByte();
         header.CompressionLevel = reader.ReadByte();
         header.FilesCount = reader.ReadUInt32();
         header.StartDefinitionsOffset = reader.ReadUInt64();
@@ -375,6 +376,7 @@ internal sealed class ApiV1_6_0 : IRoflanArchiveApi
         writer.Write(header.Version.Build);
         writer.Write(header.Version.Revision);
         writer.Write(header.Name);
+        writer.Write((byte)header.CompressionType);
         writer.Write(header.CompressionLevel);
         writer.Write(header.FilesCount);
 
