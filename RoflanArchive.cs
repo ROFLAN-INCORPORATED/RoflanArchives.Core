@@ -243,11 +243,17 @@ public class RoflanArchive : IRoflanArchive, IEnumerable<RoflanArchiveFile>
         if (!Directory.Exists(directoryPath))
             throw new FileNotFoundException($"Directory at path '{directoryPath}' was not found");
 
+        var fileNameWithoutExtension =
+            System.IO.Path.GetExtension(fileName) == Extension
+                ? System.IO.Path.GetFileNameWithoutExtension(fileName)
+                : fileName;
+        fileName = fileNameWithoutExtension + Extension;
+
         var archive = new RoflanArchive(
-            System.IO.Path.Combine(directoryPath, $"{fileName}{Extension}"),
+            System.IO.Path.Combine(directoryPath, fileName),
             compressionType,
             compressionLevel,
-            archiveName ?? fileName,
+            archiveName ?? fileNameWithoutExtension,
             version);
 
         var fileId = uint.MaxValue;
