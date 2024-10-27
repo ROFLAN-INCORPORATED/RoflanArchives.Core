@@ -256,8 +256,6 @@ public class RoflanArchive : IRoflanArchive, IEnumerable<RoflanArchiveFile>
             archiveName ?? fileNameWithoutExtension,
             version);
 
-        var fileId = uint.MaxValue;
-
         foreach (var source in sources)
         {
             var sourcePath = source.Path;
@@ -322,8 +320,11 @@ public class RoflanArchive : IRoflanArchive, IEnumerable<RoflanArchiveFile>
                         : fileRelativePath[(System.IO.Path.GetPathRoot(fileRelativePath)?.Length ?? 0)..];
                 }
 
+                if (OperatingSystem.IsWindows())
+                    fileRelativePath = fileRelativePath.Replace('\\', '/');
+
                 var file = new RoflanArchiveFile(
-                    sourceFile.Id ?? --fileId,
+                    sourceFile.Id ?? RoflanArchiveUtils.GenerateId(fileRelativePath),
                     fileRelativePath,
                     sourceFile.CompressionType,
                     sourceFile.CompressionLevel);
@@ -393,9 +394,14 @@ public class RoflanArchive : IRoflanArchive, IEnumerable<RoflanArchiveFile>
 
         foreach (var targetFile in file._files)
         {
+            var targetFileRelativePath = targetFile.RelativePath;
+
+            if (OperatingSystem.IsWindows())
+                targetFileRelativePath = targetFileRelativePath.Replace('/', '\\');
+
             var targetFilePath = System.IO.Path.Combine(
                 targetDirectoryPath,
-                targetFile.RelativePath);
+                targetFileRelativePath);
             var targetFileDirectoryPath = System.IO.Path.GetDirectoryName(
                 targetFilePath);
 

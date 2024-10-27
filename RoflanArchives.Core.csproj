@@ -9,9 +9,9 @@
     <RootNamespace>RoflanArchives.Core</RootNamespace>
     <AssemblyName>RoflanArchives.Core</AssemblyName>
     <Product>RoflanArchives.Core</Product>
-    <AssemblyVersion>1.6.2.0</AssemblyVersion>
-    <FileVersion>1.6.2.0</FileVersion>
-    <Version>1.6.2</Version>
+    <AssemblyVersion>1.7.0.0</AssemblyVersion>
+    <FileVersion>1.7.0.0</FileVersion>
+    <Version>1.7.0</Version>
     <PackageId>RoflanArchives.Core</PackageId>
     <Description>Core library for working with roflan engine archive files (*.roflarc)</Description>
     <PackageTags>dotnetcore, netstandard, netcore, library, roflarc, roflan archive</PackageTags>

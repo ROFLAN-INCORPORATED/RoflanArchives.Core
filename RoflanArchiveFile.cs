@@ -119,14 +119,24 @@ public class RoflanArchiveFile : IRoflanArchiveFile
 
     public FileStream GetReadStream()
     {
-        var filePath = System.IO.Path.Combine(DirectoryPath, RelativePath);
+        var fileRelativePath = RelativePath;
+
+        if (OperatingSystem.IsWindows())
+            fileRelativePath = fileRelativePath.Replace('/', '\\');
+
+        var filePath = System.IO.Path.Combine(DirectoryPath, fileRelativePath);
 
         return File.Open(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
     }
 
     public FileStream GetWriteStream()
     {
-        var filePath = System.IO.Path.Combine(DirectoryPath, RelativePath);
+        var fileRelativePath = RelativePath;
+
+        if (OperatingSystem.IsWindows())
+            fileRelativePath = fileRelativePath.Replace('/', '\\');
+
+        var filePath = System.IO.Path.Combine(DirectoryPath, fileRelativePath);
 
         return File.Open(filePath, FileMode.Create, FileAccess.Write, FileShare.None);
     }
