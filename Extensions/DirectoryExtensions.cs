@@ -10,7 +10,7 @@ internal static class DirectoryExtensions
     public static List<string> GetAllFiles(
         string directoryPath,
         string[]? blacklistPaths = null,
-        int maxDepth = -1)
+        int? maxDepth = -1)
     {
         return EnumerateAllFiles(
                 directoryPath,
@@ -23,7 +23,7 @@ internal static class DirectoryExtensions
     public static IEnumerable<string> EnumerateAllFiles(
         string directoryPath,
         string[]? blacklistPaths = null,
-        int maxDepth = -1)
+        int? maxDepth = -1)
     {
         directoryPath = directoryPath
             .TrimEnd(Path.DirectorySeparatorChar)
@@ -57,8 +57,10 @@ internal static class DirectoryExtensions
     private static IEnumerable<string> EnumerateAllFilesInternal(
         string directoryPath,
         string[] blacklistPaths,
-        int maxDepth = -1)
+        int? maxDepth = -1)
     {
+        maxDepth ??= -1;
+
         if (!Directory.Exists(directoryPath))
             return Array.Empty<string>();
 
@@ -78,7 +80,9 @@ internal static class DirectoryExtensions
                     EnumerateAllFilesInternal(
                         directory,
                         blacklistPaths,
-                        maxDepth - 1));
+                        maxDepth is < 0
+                            ? maxDepth
+                            : maxDepth - 1));
             }
         }
 

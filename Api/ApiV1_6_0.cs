@@ -17,17 +17,22 @@ internal sealed class ApiV1_6_0 : IRoflanArchiveApi
     internal static class CompressionUtils
     {
         private static readonly Dictionary<RoflanArchiveCompressionType, Type?> CompressionTypeToLevelMap;
+        private static readonly Dictionary<Type, object?> CompressionLevelToDefaultValueMap;
 
 
 
-        public static readonly RoflanArchiveCompressionType DefaultCompressionType = RoflanArchiveCompressionType.LZ4Stream;
-        public static readonly RoflanArchiveCompressionType DefaultCompressionLevel = (byte)LZ4Level.L00_FAST;
+        public static readonly RoflanArchiveCompressionType DefaultCompressionType;
+        public static readonly object DefaultCompressionLevel;
 
 
 
         static CompressionUtils()
         {
             CompressionTypeToLevelMap = CreateCompressionTypeToLevelMap();
+            CompressionLevelToDefaultValueMap = CreateCompressionLevelToDefaultValueMap();
+
+            DefaultCompressionType = RoflanArchiveCompressionType.LZ4Stream;
+            DefaultCompressionLevel = LZ4Level.L00_FAST;
         }
 
 
@@ -43,9 +48,17 @@ internal sealed class ApiV1_6_0 : IRoflanArchiveApi
             };
         }
 
+        private static Dictionary<Type, object?> CreateCompressionLevelToDefaultValueMap()
+        {
+            return new Dictionary<Type, object?>
+            {
+                { typeof(LZ4Level), LZ4Level.L00_FAST }
+            };
+        }
 
 
-        public static (RoflanArchiveCompressionType Type, Enum? MappedLevel) GetCompressionInfo(
+
+        public static (RoflanArchiveCompressionType Type, object? MappedLevel) GetCompressionInfo(
             IRoflanArchiveHeader header,
             IRoflanArchiveFile file)
         {
@@ -75,7 +88,7 @@ internal sealed class ApiV1_6_0 : IRoflanArchiveApi
 
             return (DefaultCompressionType, DefaultCompressionLevel);
         }
-        public static Enum? MapToCompressionLevelByTypeInternal(
+        public static object? MapToCompressionLevelByTypeInternal(
             RoflanArchiveCompressionType compressionType,
             byte? compressionLevel)
         {
@@ -86,29 +99,34 @@ internal sealed class ApiV1_6_0 : IRoflanArchiveApi
             if (!CompressionTypeToLevelMap.ContainsKey(compressionType))
                 return null;
 
-            var compressionLevelUnderlyingEnumType =
+            var compressionLevelUnderlyingType =
                 CompressionTypeToLevelMap[compressionType];
 
-            if (compressionLevelUnderlyingEnumType == null)
+            if (compressionLevelUnderlyingType == null)
                 return null;
 
-            var compressionLevelUnderlyingEnumValues = Enum
-                .GetValuesAsUnderlyingType(
-                    compressionLevelUnderlyingEnumType)
-                .Cast<int>()
-                .ToArray();
+            if (compressionLevelUnderlyingType.IsEnum)
+            {
+                var compressionLevelUnderlyingEnumValues = Enum
+                    .GetValuesAsUnderlyingType(
+                        compressionLevelUnderlyingType)
+                    .Cast<int>()
+                    .ToArray();
 
-            if (compressionLevelUnderlyingEnumValues.Length == 0)
-                return null;
+                if (compressionLevelUnderlyingEnumValues.Length == 0)
+                    return null;
 
-            var compressionLevelEnumValue = Math.Clamp(
-                compressionLevel.Value,
-                (byte)compressionLevelUnderlyingEnumValues[0],
-                (byte)compressionLevelUnderlyingEnumValues[^1]);
+                var compressionLevelEnumValue = Math.Clamp(
+                    compressionLevel.Value,
+                    (byte)compressionLevelUnderlyingEnumValues[0],
+                    (byte)compressionLevelUnderlyingEnumValues[^1]);
 
-            return (Enum)Enum.ToObject(
-                compressionLevelUnderlyingEnumType,
-                compressionLevelEnumValue);
+                return Enum.ToObject(
+                    compressionLevelUnderlyingType,
+                    compressionLevelEnumValue);
+            }
+
+            return compressionLevel.Value;
         }
 
 

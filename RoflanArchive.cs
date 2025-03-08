@@ -5,9 +5,11 @@ using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.IO;
 using System.Linq;
+using System.Runtime.Serialization;
 using K4os.Compression.LZ4;
 using RoflanArchives.Core.Api;
 using RoflanArchives.Core.Cryptography;
+using RoflanArchives.Core.Definitions.Json;
 using RoflanArchives.Core.Extensions;
 
 namespace RoflanArchives.Core;
@@ -365,6 +367,183 @@ public class RoflanArchive : IRoflanArchive, IEnumerable<RoflanArchiveFile>
 
         return archive.Save();
     }
+    public static IEnumerable<RoflanArchive> Pack(
+        string definitionFilePath)
+    {
+        if (!File.Exists(definitionFilePath))
+            throw new FileNotFoundException($"Definition file at path '{definitionFilePath}' was not found");
+
+        JsonDefinition? definition = null;
+
+        try
+        {
+            using (var definitionFile = File.OpenRead(definitionFilePath))
+            {
+                definition = new JsonDefinition(definitionFile);
+            }
+        }
+        catch (Exception e)
+        {
+            throw new SerializationException($"Error when trying to read json definition from file at path '{definitionFilePath}'", e);
+        }
+
+        if (definition == null)
+            throw new SerializationException($"Error when trying to read json definition from file at path '{definitionFilePath}'");
+
+        var archives = new List<RoflanArchive>(
+            definition.Schema.Archives.Count);
+
+        foreach (var archiveSchema in definition.Schema.Archives)
+        {
+            var directoryPath = System.IO.Path.GetDirectoryName(archiveSchema.FilePath);
+            var fileName = System.IO.Path.GetFileName(archiveSchema.FilePath);
+            var archiveName = archiveSchema.Name;
+            var compressionType = archiveSchema.CompressionType;
+            var compressionLevel = (byte?)archiveSchema.CompressionLevel;
+            var version = archiveSchema.Version != null
+                ? new Version(archiveSchema.Version)
+                : null;
+            var sources = archiveSchema.SourceDirectories;
+
+            if (directoryPath == null)
+                directoryPath = AppDomain.CurrentDomain.BaseDirectory;
+
+            directoryPath = directoryPath
+                .TrimEnd(System.IO.Path.DirectorySeparatorChar)
+                .TrimEnd(System.IO.Path.AltDirectorySeparatorChar);
+            directoryPath = !System.IO.Path.IsPathRooted(directoryPath)
+                ? System.IO.Path.GetFullPath(directoryPath)
+                : directoryPath;
+
+            if (!Directory.Exists(directoryPath))
+                throw new FileNotFoundException($"Directory at path '{directoryPath}' was not found");
+
+            var fileNameWithoutExtension =
+                System.IO.Path.GetExtension(fileName) == Extension
+                    ? System.IO.Path.GetFileNameWithoutExtension(fileName)
+                    : fileName;
+            fileName = fileNameWithoutExtension + Extension;
+
+            var archive = new RoflanArchive(
+                System.IO.Path.Combine(directoryPath, fileName),
+                compressionType,
+                compressionLevel,
+                archiveName ?? fileNameWithoutExtension,
+                version);
+
+            foreach (var source in sources)
+            {
+                var sourcePath = source.Path;
+
+                sourcePath = sourcePath
+                    .TrimEnd(System.IO.Path.DirectorySeparatorChar)
+                    .TrimEnd(System.IO.Path.AltDirectorySeparatorChar);
+                sourcePath = !System.IO.Path.IsPathRooted(sourcePath)
+                    ? System.IO.Path.GetFullPath(sourcePath)
+                    : sourcePath;
+
+                if (!Directory.Exists(sourcePath))
+                    throw new FileNotFoundException($"Source at path '{sourcePath}' was not found");
+
+                // Small hack for getting the name of the current directory instead of the parent
+                var sourceDirectoryName =
+                    System.IO.Path.GetFileName(
+                        sourcePath);
+
+                var sourceFiles = source.Files;
+
+                // ReSharper disable PossibleMultipleEnumeration
+
+                sourceFiles = sourceFiles == null || !sourceFiles.Any()
+                    ? DirectoryExtensions
+                        .EnumerateAllFiles(
+                            sourcePath,
+                            source.BlacklistPaths?.ToArray(),
+                            source.MaxDepth)
+                        .Select(
+                            path => new FileSchema { Path = path })
+                        .ToObservableCollection()
+                    : sourceFiles;
+
+                // ReSharper restore PossibleMultipleEnumeration
+
+                foreach (var sourceFile in sourceFiles)
+                {
+                    string filePath;
+                    string fileRelativePath;
+
+                    if (!System.IO.Path.IsPathRooted(sourceFile.Path))
+                    {
+                        filePath = System.IO.Path.Combine(
+                            sourcePath,
+                            sourceFile.Path);
+
+                        fileRelativePath = System.IO.Path.Combine(
+                            sourceDirectoryName,
+                            sourceFile.Path);
+                    }
+                    else
+                    {
+                        filePath = sourceFile.Path;
+
+                        fileRelativePath = System.IO.Path.GetRelativePath(
+                            sourcePath,
+                            filePath);
+                        fileRelativePath = !System.IO.Path.IsPathRooted(fileRelativePath)
+                            ? System.IO.Path.Combine(
+                                sourceDirectoryName,
+                                fileRelativePath)
+                            : fileRelativePath[(System.IO.Path.GetPathRoot(fileRelativePath)?.Length ?? 0)..];
+                    }
+
+                    if (OperatingSystem.IsWindows())
+                        fileRelativePath = fileRelativePath.Replace('\\', '/');
+
+                    var file = new RoflanArchiveFile(
+                        sourceFile.Id ?? RoflanArchiveUtils.GenerateId(fileRelativePath),
+                        fileRelativePath,
+                        sourceFile.CompressionType,
+                        (byte?)sourceFile.CompressionLevel);
+
+                    // Small hack to get the parent directory
+                    ((IRoflanArchiveFile)file).DirectoryPath = System.IO.Path.Combine(sourcePath, "..");
+
+                    if (archive._api.Version < new Version(1, 5, 0, 0))
+                    {
+                        var fileData = File.ReadAllBytes(
+                            filePath);
+
+#pragma warning disable CS0618 // Тип или член устарел
+                        ((IRoflanArchiveFile)file).Data = fileData;
+#pragma warning restore CS0618 // Тип или член устарел
+                    }
+                    else
+                    {
+                        using var fileDataStream =
+                            file.GetReadStream();
+
+                        file.DataStream.Position = 0;
+
+                        fileDataStream.CopyTo(
+                            file.DataStream);
+
+                        file.DataStream.Position = 0;
+                    }
+
+                    archive._files.Add(
+                        file);
+                    archive._filesById.Add(
+                        file.Id, file);
+                    archive._filesByRelativePath.Add(
+                        file.RelativePath, file);
+                }
+            }
+
+            archives.Add(archive.Save());
+        }
+
+        return archives;
+    }
 
     public static void Unpack(
         string filePath,
@@ -474,6 +653,9 @@ public class RoflanArchive : IRoflanArchive, IEnumerable<RoflanArchiveFile>
         RoflanArchive file,
         string relativePath)
     {
+        if (OperatingSystem.IsWindows())
+            relativePath = relativePath.Replace('\\', '/');
+
         return (RoflanArchiveFile)file
             .LoadFile(relativePath);
     }
