@@ -22,8 +22,8 @@ public class JsonDefinition
     private static DefinitionSchema Read(
         Stream stream)
     {
-        var schema = JsonSerializer
-            .Deserialize<DefinitionSchema>(stream);
+        var schema = JsonSerializer.Deserialize(stream,
+            DefinitionSchemaContext.Default.DefinitionSchema);
 
         if (schema == null)
             throw new SerializationException("Error when trying to read json definition from stream");
