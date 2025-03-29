@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.ObjectModel;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using K4os.Compression.LZ4;
 using RoflanArchives.Core.Cryptography;
@@ -8,6 +9,11 @@ namespace RoflanArchives.Core.Api;
 
 // ReSharper disable once UnusedType.Global
 // ReSharper disable once InconsistentNaming
+[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.Interfaces |
+                            DynamicallyAccessedMemberTypes.PublicConstructors |
+                            DynamicallyAccessedMemberTypes.NonPublicConstructors |
+                            DynamicallyAccessedMemberTypes.PublicProperties |
+                            DynamicallyAccessedMemberTypes.PublicMethods)]
 [Obsolete]
 internal sealed class ApiV1_4_0 : IRoflanArchiveApi
 {
